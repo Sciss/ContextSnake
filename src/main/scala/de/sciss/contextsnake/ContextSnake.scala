@@ -48,13 +48,13 @@ object ContextSnake {
 //    type Edge     = Int
 
 
-    private final class Edge(var startIdx: Int, stopIdx: Int, var sourceNode: Int) {      // TODO: sourceNode not needed
+    private final class Edge(var startIdx: Int, stopIdx: Int /*, var sourceNode: Int */) {
       val targetNode = nodeCount
       nodeCount += 1
 
       def span = (if (stopIdx < 0) corpus.length else stopIdx) - startIdx
 
-      override def toString = "Edge(start=" + startIdx + ", stop=" + stopIdx + ", source=" + sourceNode + ", target=" + targetNode + ")"
+      override def toString = "Edge(start=" + startIdx + ", stop=" + stopIdx + /* ", source=" + sourceNode + */ ", target=" + targetNode + ")"
     }
 
 //    private final class Node {
@@ -94,19 +94,19 @@ object ContextSnake {
     @inline private def split(edge: Edge): Int = {
       val startIdx  = edge.startIdx
       val startElem = corpus(startIdx)
-      edges -= ((edge.sourceNode, startElem)) // TODO: not necessary, because edge.sourceNode == activeNode (the entry will be overwritten further down)
+//      edges -= ((edge.sourceNode, startElem)) // not necessary, because edge.sourceNode == activeNode (the entry will be overwritten further down)
       val activeSpan = activeStopIdx - activeStartIdx
-      val newEdge = new Edge(startIdx, startIdx + activeSpan, activeNode)
+      val splitIdx  = startIdx + activeSpan
+      val newEdge   = new Edge(startIdx, splitIdx /*, activeNode */)
       edges += (((activeNode, startElem), newEdge))
 //      val newNode = new Node
 //      newNode.suffixNode = activeNode
       val newNode = newEdge.targetNode // nodes.length
      tails(newNode) = activeNode
 //      nodes += newNode
-      val newStartIdx  = startIdx + activeSpan  // TODO: DRY (newEdge.stopIdx)
-      edge.startIdx    = newStartIdx
-      edge.sourceNode  = newNode
-      edges += (((edge.sourceNode, corpus(newStartIdx)), edge))
+      edge.startIdx    = splitIdx
+//      edge.sourceNode  = newNode
+      edges += (((newNode, corpus(splitIdx)), edge))
       newNode
     }
 
@@ -157,7 +157,7 @@ object ContextSnake {
           split(edge)
         }
         // create new leaf edge starting at parentNode
-        val newEdge = new Edge(oldLen, -1, parent)
+        val newEdge = new Edge(oldLen, -1 /*, parent */)
         edges += (((parent, elem), newEdge))
         if (prevParent > 0) {
 //          nodes(prevParent).suffixNode = parent
