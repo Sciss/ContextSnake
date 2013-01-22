@@ -36,31 +36,23 @@ object ContextSnake {
 
   private final class Impl[A] extends ContextSnake[A] {
     private val corpus            = mutable.Buffer.empty[A]
-//    private val nodes             = mutable.Buffer.empty[Node]
     private val tails             = mutable.Map.empty[Int, Int] withDefaultValue -1
     private val edges             = mutable.Map.empty[EdgeKey, Edge]
-    private var activeNode        = 0 // node
-    private var activeStartIdx    = 0 // start
-    private var activeStopIdx     = 0 // stop
+    private var activeNode        = 0
+    private var activeStartIdx    = 0
+    private var activeStopIdx     = 0
     private var nodeCount         = 1
 
     type EdgeKey  = (Int, A)
-//    type Edge     = Int
 
-
-    private final class Edge(var startIdx: Int, stopIdx: Int /*, var sourceNode: Int */) {
+    private final class Edge(var startIdx: Int, stopIdx: Int) {
       val targetNode = nodeCount
       nodeCount += 1
 
       def span = (if (stopIdx < 0) corpus.length else stopIdx) - startIdx
 
-      override def toString = "Edge(start=" + startIdx + ", stop=" + stopIdx + /* ", source=" + sourceNode + */ ", target=" + targetNode + ")"
+      override def toString = "Edge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
     }
-
-//    private final class Node {
-//      var suffixNode = -1
-//      override def toString = "Node(suffix=" + suffixNode + ")@" + hashCode().toHexString
-//    }
 
     def contains(seq: Traversable[A]): Boolean = {
       ???
@@ -88,40 +80,30 @@ object ContextSnake {
       sb.toString
     }
 
-//    @inline private def isExplicit = activeStartIdx == activeStopIdx
     @inline private def isExplicit = activeStartIdx >= activeStopIdx
 
     @inline private def split(edge: Edge): Int = {
-      val startIdx  = edge.startIdx
-      val startElem = corpus(startIdx)
-//      edges -= ((edge.sourceNode, startElem)) // not necessary, because edge.sourceNode == activeNode (the entry will be overwritten further down)
-      val activeSpan = activeStopIdx - activeStartIdx
-      val splitIdx  = startIdx + activeSpan
-      val newEdge   = new Edge(startIdx, splitIdx /*, activeNode */)
-      edges += (((activeNode, startElem), newEdge))
-//      val newNode = new Node
-//      newNode.suffixNode = activeNode
-      val newNode = newEdge.targetNode // nodes.length
-     tails(newNode) = activeNode
-//      nodes += newNode
-      edge.startIdx    = splitIdx
-//      edge.sourceNode  = newNode
-      edges += (((newNode, corpus(splitIdx)), edge))
+      val startIdx    = edge.startIdx
+      val startElem   = corpus(startIdx)
+      val activeSpan  = activeStopIdx - activeStartIdx
+      val splitIdx    = startIdx + activeSpan
+      val newEdge     = new Edge(startIdx, splitIdx )
+      edges          += (((activeNode, startElem), newEdge))
+      val newNode     = newEdge.targetNode
+      tails(newNode)  = activeNode
+      edge.startIdx   = splitIdx
+      edges          += (((newNode, corpus(splitIdx)), edge))
       newNode
     }
 
-    @inline private def canonize() { // TODO: "Finally, these modifications reduce the state canonization logic to simply "consume edges until the next edge is not small enough to consume or the state is explicit"."
-      if (isExplicit) return
-
-      var edge      = edges((activeNode, corpus(activeStartIdx)))
-      var edgeSpan  = edge.span // stopIdx - edge.startIdx
-      while (edgeSpan <= activeStopIdx - activeStartIdx ) {
+    @inline private def canonize() {
+      while (!isExplicit) {
+        val edge        = edges((activeNode, corpus(activeStartIdx)))
+        val edgeSpan    = edge.span
+        val activeSpan  = activeStopIdx - activeStartIdx
+        if (edgeSpan > activeSpan) return
         activeStartIdx += edgeSpan
         activeNode      = edge.targetNode
-        if (activeStartIdx < activeStopIdx) {
-          edge      = edges((activeNode, corpus(activeStartIdx)))
-          edgeSpan  = edge.span // stopIdx - edge.startIdx
-        }
       }
     }
 
@@ -134,7 +116,6 @@ object ContextSnake {
       def finish() {
         // TODO: DRY - this is done in the while loop as well
         if (prevParent > 0) {
-//          nodes(prevParent).suffixNode = parent
           tails(prevParent) = parent
         }
         activeStopIdx += 1
@@ -160,7 +141,6 @@ object ContextSnake {
         val newEdge = new Edge(oldLen, -1 /*, parent */)
         edges += (((parent, elem), newEdge))
         if (prevParent > 0) {
-//          nodes(prevParent).suffixNode = parent
           tails(prevParent) = parent
         }
         prevParent = parent
@@ -169,23 +149,12 @@ object ContextSnake {
         if (activeNode == 0) {
           activeStartIdx += 1
         } else {
-//          activeNode = nodes(activeNode).suffixNode
           activeNode = tails(activeNode)
           canonize()
         }
       }
     }
   }
-
-//  private final class Suffix /* (node: Int, start: Int, stop: Int) */ {
-//
-//    def isExplicit  = startIdx == stopIdx
-//    def isImplicit  = startIdx < stopIdx
-//
-//    def hasNext(elem: A): Boolean = {
-//
-//    }
-//  }
 }
 trait ContextSnake[A] {
   def append(elem: A): Unit
