@@ -1,5 +1,7 @@
 name := "ContextSnake"
 
+version := "0.0.1"
+
 organization := "de.sciss"
 
 scalaVersion := "2.10.0"

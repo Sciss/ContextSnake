@@ -87,7 +87,6 @@ object ContextSnake {
       sb.append("digraph suffixes {\n")
 
       def appendNode(source: Int) {
-//        sb.append("  " + source + " [shape=point, label=\"\", xlabel=\"" + source + "\"];\n")
         sb.append("  " + source + " [shape=circle];\n")
         val out = elemSet.flatMap { e => edges.get((source, e))}
         out.foreach { edge =>
@@ -120,7 +119,6 @@ object ContextSnake {
       val newEdge     = new Edge(startIdx, splitIdx )
       edges          += (((activeNode, startElem), newEdge))
       val newNode     = newEdge.targetNode
-//println("SPLIT: tails(" + newNode + ") = " + activeNode)
       tails(newNode)  = activeNode
       edge.startIdx   = splitIdx
       edges          += (((newNode, corpus(splitIdx)), edge))
@@ -150,31 +148,21 @@ object ContextSnake {
     private def add1(elem: A) {
       val elemIdx     = corpus.length
       corpus         += elem
-//      var parent      = -1
       var prevParent  = -1
-
-      @inline def finish() {
-        // this is _not_ needed
-//        if (prevParent > 0) {
-////println("FINISH: tails(" + prevParent + ") = " + parent)
-//          assert(tails(prevParent) == parent)
-//          tails(prevParent) = parent
-//        }
-        activeStopIdx += 1
-        canonize()
-      }
 
       while (true) {
         val parent = if (isExplicit) {
           if (edges.contains((activeNode, elem))) {
-            finish()
+            activeStopIdx += 1
+            canonize()
             return
           }
           activeNode
         } else {
           val edge = edges((activeNode, corpus(activeStartIdx)))
           if (corpus(edge.startIdx + (activeStopIdx - activeStartIdx)) == elem) {
-            finish()
+            activeStopIdx += 1
+            canonize()
             return
           }
           split(edge)
@@ -183,7 +171,6 @@ object ContextSnake {
         val newEdge = new Edge(elemIdx, -1 /*, parent */)
         edges += (((parent, elem), newEdge))
         if (prevParent > 0) {
-//println("ITER: tails(" + prevParent + ") = " + parent)
           tails(prevParent) = parent
         }
         prevParent = parent
