@@ -26,6 +26,7 @@
 package de.sciss.contextsnake
 
 import collection.mutable
+import annotation.tailrec
 
 object ContextSnake {
   def empty[A]: ContextSnake[A] = new Impl[A]
@@ -78,7 +79,7 @@ object ContextSnake {
       true
     }
 
-    def size: Int = corpus.size
+    def size: Int = corpus.length
     def apply(idx: Int): A = corpus(idx)
 
     def toDOT(tailEdges: Boolean, sep: String): String = {
@@ -148,32 +149,23 @@ object ContextSnake {
     private def add1(elem: A) {
       val elemIdx     = corpus.length
       corpus         += elem
-      var prevParent  = -1
 
-      while (true) {
+      @tailrec def loop(prevParent: Int) {
         val parent = if (isExplicit) {
-          if (edges.contains((activeNode, elem))) {
-            activeStopIdx += 1
-            canonize()
-            return
-          }
+          if (edges.contains((activeNode, elem))) return
           activeNode
         } else {
           val edge = edges((activeNode, corpus(activeStartIdx)))
-          if (corpus(edge.startIdx + (activeStopIdx - activeStartIdx)) == elem) {
-            activeStopIdx += 1
-            canonize()
-            return
-          }
+          if (corpus(edge.startIdx + (activeStopIdx - activeStartIdx)) == elem) return
           split(edge)
         }
+
         // create new leaf edge starting at parentNode
         val newEdge = new Edge(elemIdx, -1 /*, parent */)
         edges += (((parent, elem), newEdge))
         if (prevParent > 0) {
           tails(prevParent) = parent
         }
-        prevParent = parent
 
         // drop to tail suffix
         if (activeNode == 0) {
@@ -182,7 +174,13 @@ object ContextSnake {
           activeNode = tails(activeNode)
           canonize()
         }
+
+        loop(parent)
       }
+
+      loop(-1)
+      activeStopIdx += 1
+      canonize()
     }
   }
 }
