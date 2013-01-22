@@ -48,10 +48,6 @@ object ContextSnake {
 //    type Edge     = Int
 
 
-    def contains(seq: Traversable[A]): Boolean = {
-      ???
-    }
-
     private final class Edge(var startIdx: Int, stopIdx: Int, var sourceNode: Int) {      // TODO: sourceNode not needed
       val targetNode = nodeCount
       nodeCount += 1
@@ -65,6 +61,32 @@ object ContextSnake {
 //      var suffixNode = -1
 //      override def toString = "Node(suffix=" + suffixNode + ")@" + hashCode().toHexString
 //    }
+
+    def contains(seq: Traversable[A]): Boolean = {
+      ???
+    }
+
+    def toDOT(tailEdges: Boolean): String = {
+      val elemSet = corpus.toSet
+      val sb      = new StringBuffer()
+      sb.append("graph suffixes {\n")
+
+      def appendNode(source: Int) {
+//        sb.append("  " + source + " [shape=point, label=\"\", xlabel=\"" + source + "\"];\n")
+        sb.append("  " + source + " [shape=circle];\n")
+        val out = elemSet.flatMap { e => edges.get((source, e))}
+        out.foreach { edge =>
+          val str     = corpus.slice(edge.startIdx, edge.startIdx + edge.span).mkString("")
+          val target  = edge.targetNode
+          sb.append("  " + source + " -- " + target + " [label=\"" + str + "\"];\n")
+          appendNode(target)
+        }
+      }
+      appendNode(0)
+
+      sb.append("}\n")
+      sb.toString
+    }
 
 //    @inline private def isExplicit = activeStartIdx == activeStopIdx
     @inline private def isExplicit = activeStartIdx >= activeStopIdx
@@ -168,4 +190,6 @@ object ContextSnake {
 trait ContextSnake[A] {
   def append(elem: A): Unit
   def contains(seq: Traversable[A]): Boolean
+
+  def toDOT(tailEdges: Boolean = false): String
 }
