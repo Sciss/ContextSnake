@@ -84,7 +84,7 @@ object ContextSnake {
     def toDOT(tailEdges: Boolean, sep: String): String = {
       val elemSet = corpus.toSet
       val sb      = new StringBuffer()
-      sb.append("graph suffixes {\n")
+      sb.append("digraph suffixes {\n")
 
       def appendNode(source: Int) {
 //        sb.append("  " + source + " [shape=point, label=\"\", xlabel=\"" + source + "\"];\n")
@@ -93,14 +93,17 @@ object ContextSnake {
         out.foreach { edge =>
           val str     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
           val target  = edge.targetNode
-          sb.append("  " + source + " -- " + target + " [label=\"" + str + "\"];\n")
+          sb.append("  " + source + " -> " + target + " [label=\"" + str + "\"];\n")
           appendNode(target)
         }
       }
       appendNode(0)
 
-      if (tailEdges) {
-        sys.error("tailEdges not yet implemented")
+      if (tailEdges && tails.nonEmpty) {
+        sb.append( "\n" )
+        tails.foreach { case (source, target) =>
+          sb.append("  " + source + " -> " + target + " [style=dotted];\n")
+        }
       }
 
       sb.append("}\n")
@@ -117,6 +120,7 @@ object ContextSnake {
       val newEdge     = new Edge(startIdx, splitIdx )
       edges          += (((activeNode, startElem), newEdge))
       val newNode     = newEdge.targetNode
+//println("SPLIT: tails(" + newNode + ") = " + activeNode)
       tails(newNode)  = activeNode
       edge.startIdx   = splitIdx
       edges          += (((newNode, corpus(splitIdx)), edge))
@@ -146,20 +150,22 @@ object ContextSnake {
     private def add1(elem: A) {
       val elemIdx     = corpus.length
       corpus         += elem
-      var parent      = -1
+//      var parent      = -1
       var prevParent  = -1
 
-      def finish() {
-        // TODO: DRY - this is done in the while loop as well
-        if (prevParent > 0) {
-          tails(prevParent) = parent
-        }
+      @inline def finish() {
+        // this is _not_ needed
+//        if (prevParent > 0) {
+////println("FINISH: tails(" + prevParent + ") = " + parent)
+//          assert(tails(prevParent) == parent)
+//          tails(prevParent) = parent
+//        }
         activeStopIdx += 1
         canonize()
       }
 
       while (true) {
-        parent = if (isExplicit) {
+        val parent = if (isExplicit) {
           if (edges.contains((activeNode, elem))) {
             finish()
             return
@@ -177,6 +183,7 @@ object ContextSnake {
         val newEdge = new Edge(elemIdx, -1 /*, parent */)
         edges += (((parent, elem), newEdge))
         if (prevParent > 0) {
+//println("ITER: tails(" + prevParent + ") = " + parent)
           tails(prevParent) = parent
         }
         prevParent = parent
@@ -250,7 +257,7 @@ trait ContextSnake[A] {
    * This is mostly for debugging or demonstration purposes and might not be
    * particularly efficient or suitable for large trees.
    *
-   * @param tailEdges currently has to be `false`
+   * @param tailEdges whether to include the tail (suffix-pointer) edges or not
    * @return  a string representation in DOT format
    */
   def toDOT(tailEdges: Boolean = false, sep: String = ""): String
