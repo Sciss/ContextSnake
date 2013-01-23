@@ -12,4 +12,6 @@ retrieveManaged := true
 
 scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature", "-language:higherKinds")
 
+scalacOptions ++= Seq("-Xelide-below", (annotation.elidable.SEVERE).toString)
+
 initialCommands in console := "import de.sciss.contextsnake._"

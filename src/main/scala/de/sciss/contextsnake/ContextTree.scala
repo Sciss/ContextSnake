@@ -121,9 +121,14 @@ object ContextTree {
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
+  @elidable(INFO) private final val DEBUG = false
+  @elidable(INFO) private def DEBUG_LOG(message: => String) {
+    if (DEBUG) println(message)
+  }
+
   private final class Impl[A] extends ContextTree[A] {
     private val corpus  = mutable.Buffer.empty[A]
-    @elidable(INFO) private var nodeCount = 1
+    /* @elidable(INFO) */ private var nodeCount = 1 // scalac crashes when elidable
     @elidable(INFO) private def nextNodeID() = {
       val res = nodeCount
       nodeCount += 1
@@ -215,29 +220,33 @@ object ContextTree {
         } + ", source=" + source + ")"
 
       def dropToTail() {
-println("DROP TO TAIL")
         source match {
-          case i: InnerNode => source = i.tail
-          case RootNode     => startIdx += 1
+          case i: InnerNode =>
+            val old = source
+            DEBUG_LOG("DROP: Suffix link from " + old + " to " + i.tail)
+            source = i.tail
+          case RootNode =>
+            DEBUG_LOG("DROP: At root")
+            startIdx += 1
         }
         canonize()
       }
 
       def canonize() {
-println("\n>>>>>>>> CANONIZE " + active)
+        DEBUG_LOG(">>>> CANONIZE " + active)
         while (!isExplicit) {
           val edge       = source.edges(corpus(startIdx))
           val edgeSpan   = edge.span
-println("         edges(" + corpus(startIdx) + ") = " + edge + " --> edge.span = " + edgeSpan + ", active.span = " + span)
+          DEBUG_LOG("     edges(" + corpus(startIdx) + ") = " + edge)
           if (edgeSpan > span) {
-println("<<<<<<<< CANONIZE " + active + "\n")
+            DEBUG_LOG("<<<< CANONIZE " + active + "\n")
             return
           }
           startIdx      += edgeSpan
           source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
-println("         now start = " + startIdx + ", source = " + source)
+          DEBUG_LOG("     now " + active)
         }
-println("<<<<<<<< CANONIZE " + active + "\n")
+        DEBUG_LOG("<<<< CANONIZE " + active)
       }
     }
 
@@ -284,6 +293,7 @@ println("<<<<<<<< CANONIZE " + active + "\n")
     }
 
     private final case class LeafEdge(startIdx: Int) extends Edge {
+      override def toString = "LeafEdge(start=" + startIdx + ")"
       def targetNode: NodeOrLeaf = Leaf
       def stopIdx = corpus.length
       def span    = corpus.length - startIdx
@@ -360,7 +370,7 @@ println("<<<<<<<< CANONIZE " + active + "\n")
       active.source.edges += ((startElem, newEdge1))
       val newEdge2    = edge.replaceStart(splitIdx)
       newNode.edges += ((corpus(splitIdx), newEdge2))
-println("SPLIT " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
+      DEBUG_LOG("SPLIT: " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }
 
@@ -378,25 +388,31 @@ println("SPLIT " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       val elemIdx     = corpus.length
       corpus         += elem
 
-println("----------STEP " + active.stopIdx + " : active.first_char_index =" + active.startIdx + " : active.origin_node =" + active.source)
+      DEBUG_LOG("ADD: elem=" + elem + "; " + active)
 
-      @tailrec def loop(prev: RootOrNode) {
+      def addLink(n: RootOrNode, parent: RootOrNode) {
+        n match {
+          case i: InnerNode =>
+            DEBUG_LOG("LINK: from " + i + " to " + parent)
+            i.tail = parent
+          case RootNode =>
+        }
+      }
+
+      @tailrec def loop(prev: RootOrNode): RootOrNode = {
         val parent = if (active.isExplicit) {
-          if (active.source.edges.contains(elem)) return
+          if (active.source.edges.contains(elem)) return prev
           active.source
         } else {
           val edge = active.source.edges(corpus(active.startIdx))
-          if (corpus(edge.startIdx + active.span) == elem) return
+          if (corpus(edge.startIdx + active.span) == elem) return prev
           split(edge)
         }
 
         // create new leaf edge starting at parentNode
         val newEdge = LeafEdge(elemIdx)
         parent.edges += ((elem, newEdge))
-        prev match {
-          case i: InnerNode => i.tail = parent
-          case RootNode =>
-        }
+        addLink(prev, parent)
 
         // drop to tail suffix
         active.dropToTail()
@@ -404,7 +420,8 @@ println("----------STEP " + active.stopIdx + " : active.first_char_index =" + ac
         loop(parent)
       }
 
-      loop(RootNode)
+      val last = loop(RootNode)
+      addLink(last, active.source)
       active.stopIdx += 1
       active.canonize()
     }

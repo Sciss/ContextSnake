@@ -1,6 +1,6 @@
 package de.sciss.contextsnake
 
-import annotation.tailrec
+import annotation.{elidable, tailrec}
 
 object Util {
   def expandWhileChoice[A](s: ContextTree.Snake[A]): Vector[A] = {
@@ -14,5 +14,13 @@ object Util {
     }
     loop()
     s.to[Vector]
+  }
+
+  @elidable(elidable.INFO) private def printElision() {
+    println ("INFO level logging enabled.")
+  }
+
+  def elision() {
+    printElision()
   }
 }
