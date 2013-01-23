@@ -1,5 +1,6 @@
 package de.sciss.contextsnake
 
+// note: doesn't work with elision
 object ExampleTrees extends App {
   def run(input: String, tailEdges: Boolean) {
     val c = ContextTree(input: _*)

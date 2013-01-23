@@ -23,6 +23,17 @@ The following short example illustrates the initial suffix tree (you can experim
 
 ```
 
+Begin of snake design (start in `sbt test:console`):
+
+```scala
+
+    :load notes/erlkoenig.txt
+    val c = ContextTree(txt.toUpperCase: _*)
+    val s = c.snake("A")
+    // ... TODO
+
+```
+
 ### todo
 
 Eventually should be `@specialized`, but this will only make sense if scala-collections are specialized, since they are used as helper structures internally.

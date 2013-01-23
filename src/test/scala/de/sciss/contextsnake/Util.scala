@@ -3,16 +3,17 @@ package de.sciss.contextsnake
 import annotation.{elidable, tailrec}
 
 object Util {
-  def expandWhileChoice[A](s: ContextTree.Snake[A]): Vector[A] = {
-    @tailrec def loop() {
+  def expandWhileChoice[A](s: ContextTree.Snake[A], minChoice: Int = 2, maxLength: Int = 1000): Vector[A] = {
+    @tailrec def loop(i: Int) {
+      if (i == maxLength) return
       val sq  = s.successors.to[Vector]
       val sz  = sq.size
-      if (sz <= 1) return
+      if (sz < minChoice) return
       val idx = (math.random * sz).toInt
       s += sq(idx)
-      loop()
+      loop(i + 1)
     }
-    loop()
+    loop(0)
     s.to[Vector]
   }
 
