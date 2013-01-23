@@ -26,7 +26,8 @@
 package de.sciss.contextsnake
 
 import collection.mutable
-import annotation.tailrec
+import annotation.{elidable, tailrec}
+import elidable.INFO
 
 object ContextSnake {
   def empty[A]: ContextSnake[A] = new Impl[A]
@@ -39,36 +40,98 @@ object ContextSnake {
 
   private final class Impl[A] extends ContextSnake[A] {
     private val corpus            = mutable.Buffer.empty[A]
-    private val tails             = mutable.Map.empty[Int, Int] withDefaultValue -1
-    private val edges             = mutable.Map.empty[EdgeKey, Edge]
-    private var activeNode        = 0
+//    private val tails             = mutable.Map.empty[Int, Int] // withDefaultValue -1
+//    private val edges             = mutable.Map.empty[EdgeKey, Edge]
+    private var activeNode: RootOrNode = RootNode
     private var activeStartIdx    = 0
     private var activeStopIdx     = 0
-    private var nodeCount         = 1
 
-    private type EdgeKey  = (Int, A)  // source-node-id -> first-element-on-edge-label
-
-    private final class Edge(var startIdx: Int, stopIdxOption: Int) {
-      val targetNode = nodeCount
+    @elidable(INFO) private var nodeCount = 1
+    @elidable(INFO) private def nextNodeID() = {
+      val res = nodeCount
       nodeCount += 1
+      res
+    }
 
-      def stopIdx = if (stopIdxOption < 0) corpus.length else stopIdxOption
-      def span    = stopIdx - startIdx
+//    private type EdgeKey  = (Int, A)  // source-node-id -> first-element-on-edge-label
 
-      override def toString = "Edge(start=" + startIdx + ", stop=" + stopIdxOption + ", target=" + targetNode + ")"
+    private sealed trait RootOrNodeOrLeaf {
+      def getEdge(elem: A): Option[Edge]
+    }
+    private sealed trait NodeOrLeaf extends RootOrNodeOrLeaf
+    private sealed trait RootOrNode extends RootOrNodeOrLeaf {
+      // use immutable.Set because we'll have many leave nodes,
+      // and immutable.Set.empty is cheap compared to mutable.Set
+      final var edges = Map.empty[A, Edge]
+      final def getEdge(elem: A): Option[Edge] = edges.get(elem)
+      def dropTail(): Unit
+    }
+
+    private sealed trait Node extends NodeOrLeaf with RootOrNode {
+      @elidable(INFO) val id = nextNodeID()
+      @elidable(INFO) override def toString = id.toString
+    }
+
+    private case object Leaf extends NodeOrLeaf {
+      def getEdge(elem: A): Option[Edge] = None
+//      @elidable(INFO) val id = nextNodeID()
+//      @elidable(INFO) override def toString = id.toString
+    }
+
+    private final class InnerNode(var tail: RootOrNode) extends Node {
+      def dropTail() {
+        activeNode  = tail
+        canonize()
+      }
+    }
+
+    private case object RootNode extends RootOrNode {
+      override def toString = "0"
+      def dropTail() {
+        activeStartIdx += 1
+      }
+//      private def unsup(op: String) = throw new UnsupportedOperationException(op + " on the root node")
+//      def tail = unsup("tail")
+//      def tail_=(node: Int) { unsup("tail_=") }
+//      var edges = Map.empty[A, Edge]
+    }
+
+//    private def rootNode: Node = RootNode
+
+//    private sealed trait EdgeOption
+//    private case object EdgeNone extends EdgeOption
+
+    private sealed trait Edge {
+      def startIdx: Int
+      def stopIdx: Int
+      def span: Int
+      def targetNode: NodeOrLeaf
+      def replaceStart(newStart: Int): Edge
+    }
+
+    private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: InnerNode) extends Edge {
+      def span = stopIdx - startIdx
+      def replaceStart(newStart: Int) = copy(startIdx = newStart)
+    }
+
+    private final case class LeafEdge(startIdx: Int) extends Edge {
+      def targetNode: NodeOrLeaf = Leaf
+      def stopIdx = corpus.length
+      def span    = corpus.length - startIdx
+      def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
 
     override def toString = "ContextSnake(len=" + corpus.length + ")@" + hashCode().toHexString
 
     def contains(xs: TraversableOnce[A]): Boolean = {
-      var n     = 0
+      var n: RootOrNodeOrLeaf = RootNode
       var start = 0
       var stop  = 0
       xs.foreach { e =>
         if (start < stop) {
           if (corpus(start) != e) return false  // not found in implicit node
           start += 1
-        } else edges.get((n, e)) match {
+        } else n.getEdge(e) match {
           case None       => return false       // reached end of leaf node
           case Some(edge) =>
             n     = edge.targetNode
@@ -83,28 +146,37 @@ object ContextSnake {
     def apply(idx: Int): A = corpus(idx)
 
     def toDOT(tailEdges: Boolean, sep: String): String = {
-      val elemSet = corpus.toSet
+//      val elemSet = corpus.toSet
       val sb      = new StringBuffer()
       sb.append("digraph suffixes {\n")
 
-      def appendNode(source: Int) {
-        sb.append("  " + source + " [shape=circle];\n")
-        val out = elemSet.flatMap { e => edges.get((source, e))}
-        out.foreach { edge =>
-          val str     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
-          val target  = edge.targetNode
-          sb.append("  " + source + " -> " + target + " [label=\"" + str + "\"];\n")
-          appendNode(target)
-        }
-      }
-      appendNode(0)
+      var leafCnt = 0
 
-      if (tailEdges && tails.nonEmpty) {
-        sb.append( "\n" )
-        tails.foreach { case (source, target) =>
-          sb.append("  " + source + " -> " + target + " [style=dotted];\n")
+      def appendNode(source: RootOrNode) {
+        sb.append("  " + source + " [shape=circle];\n")
+        source.edges.foreach { case (_, edge) =>
+          val str     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
+          sb.append("  " + source + " -> ")
+          edge.targetNode match {
+            case Leaf =>
+              val t = "leaf" + leafCnt
+              leafCnt += 1
+              sb.append( t + " [label=\"" + str + "\"];\n")
+              sb.append( "  " + t + " [shape=point];\n")
+            case i: InnerNode =>
+              sb.append(i.toString + " [label=\"" + str + "\"];\n")
+              appendNode(i)
+          }
+        }
+
+        if (tailEdges) source match {
+          case i: InnerNode =>
+            val target = i.tail
+            sb.append("  " + source + " -> " + target + " [style=dotted];\n")
+          case _ =>
         }
       }
+      appendNode(RootNode)
 
       sb.append("}\n")
       sb.toString
@@ -113,26 +185,25 @@ object ContextSnake {
     @inline private def isExplicit  = activeStartIdx >= activeStopIdx
     @inline private def activeSpan  = activeStopIdx - activeStartIdx
 
-    @inline private def split(edge: Edge): Int = {
+    @inline private def split(edge: Edge): InnerNode = {
       val startIdx    = edge.startIdx
       val startElem   = corpus(startIdx)
       val splitIdx    = startIdx + activeSpan
-      val newEdge     = new Edge(startIdx, splitIdx )
-      edges          += (((activeNode, startElem), newEdge))
-      val newNode     = newEdge.targetNode
-      tails(newNode)  = activeNode
-      edge.startIdx   = splitIdx
-      edges          += (((newNode, corpus(splitIdx)), edge))
+      val newNode     = new InnerNode(activeNode)
+      val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
+      activeNode.edges += ((startElem, newEdge1))
+      val newEdge2    = edge.replaceStart(splitIdx)
+      newNode.edges += ((corpus(splitIdx), newEdge2))
       newNode
     }
 
     @inline private def canonize() {
       while (!isExplicit) {
-        val edge        = edges((activeNode, corpus(activeStartIdx)))
+        val edge        = activeNode.edges(corpus(activeStartIdx))
         val edgeSpan    = edge.span
         if (edgeSpan > activeSpan) return
         activeStartIdx += edgeSpan
-        activeNode      = edge.targetNode
+        activeNode      = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
       }
     }
 
@@ -150,35 +221,31 @@ object ContextSnake {
       val elemIdx     = corpus.length
       corpus         += elem
 
-      @tailrec def loop(prevParent: Int) {
+      @tailrec def loop(prev: RootOrNode) {
         val parent = if (isExplicit) {
-          if (edges.contains((activeNode, elem))) return
+          if (activeNode.edges.contains(elem)) return
           activeNode
         } else {
-          val edge = edges((activeNode, corpus(activeStartIdx)))
-          if (corpus(edge.startIdx + (activeStopIdx - activeStartIdx)) == elem) return
+          val edge = activeNode.edges(corpus(activeStartIdx))
+          if (corpus(edge.startIdx + activeSpan) == elem) return
           split(edge)
         }
 
         // create new leaf edge starting at parentNode
-        val newEdge = new Edge(elemIdx, -1 /*, parent */)
-        edges += (((parent, elem), newEdge))
-        if (prevParent > 0) {
-          tails(prevParent) = parent
+        val newEdge = LeafEdge(elemIdx)
+        parent.edges += ((elem, newEdge))
+        prev match {
+          case i: InnerNode => i.tail = parent
+          case _ =>
         }
 
         // drop to tail suffix
-        if (activeNode == 0) {
-          activeStartIdx += 1
-        } else {
-          activeNode = tails(activeNode)
-          canonize()
-        }
+        activeNode.dropTail()
 
         loop(parent)
       }
 
-      loop(-1)
+      loop(RootNode)
       activeStopIdx += 1
       canonize()
     }
