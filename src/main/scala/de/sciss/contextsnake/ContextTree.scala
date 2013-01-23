@@ -215,6 +215,7 @@ object ContextTree {
         } + ", source=" + source + ")"
 
       def dropToTail() {
+println("DROP TO TAIL")
         source match {
           case i: InnerNode => source = i.tail
           case RootNode     => startIdx += 1
@@ -223,13 +224,20 @@ object ContextTree {
       }
 
       def canonize() {
+println("\n>>>>>>>> CANONIZE " + active)
         while (!isExplicit) {
           val edge       = source.edges(corpus(startIdx))
           val edgeSpan   = edge.span
-          if (edgeSpan > span) return
+println("         edges(" + corpus(startIdx) + ") = " + edge + " --> edge.span = " + edgeSpan + ", active.span = " + span)
+          if (edgeSpan > span) {
+println("<<<<<<<< CANONIZE " + active + "\n")
+            return
+          }
           startIdx      += edgeSpan
           source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+println("         now start = " + startIdx + ", source = " + source)
         }
+println("<<<<<<<< CANONIZE " + active + "\n")
       }
     }
 
@@ -351,6 +359,7 @@ object ContextTree {
       active.source.edges += ((startElem, newEdge1))
       val newEdge2    = edge.replaceStart(splitIdx)   // XXX TODO: splitIdx is wrong startIdx
       newNode.edges += ((corpus(splitIdx), newEdge2)) // XXX TODO: splitIdx is wrong startIdx
+println("SPLIT " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }
 
@@ -367,6 +376,8 @@ object ContextTree {
     private def add1(elem: A) {
       val elemIdx     = corpus.length
       corpus         += elem
+
+println("----------STEP " + active.stopIdx + " : active.first_char_index =" + active.startIdx + " : active.origin_node =" + active.source)
 
       @tailrec def loop(prev: RootOrNode) {
         val parent = if (active.isExplicit) {

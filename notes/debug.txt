@@ -142,4 +142,83 @@ looking at the result... node #4 is the correct new splitted node
                   0, 1, 0, 0  --> THIS ONE --> seems it wasn't handled
 
 my intuition stays active.startIdx should be 4, but it's actually 5; so...?
+; active.stopIdx==9
 
+edge = active.source==Node#1.edges(corpus(active.startIdx=5)) = LeafEdge(start=3) // ok...
+corpus(edge.startIdx==3 + active.span==4) == '0'? NEIN
+; aber wieso dieser test????
+
+split
+
+; now active is (start=7, stop=9, seq=<1,0>, source=2)
+
+edge = LeafEdge(start=5)  // korrekt
+
+split
+.... after drop: active(start=9, stop=9, source=2)
+---> why is that -- shouldn't it be source=0 and not explicit?
+---> so this canonization is actually _wrong_
+
+:::::::::::::
+
+----------STEP 0 : active.first_char_index =0 : active.origin_node =0
+----------STEP 1 : active.first_char_index =1 : active.origin_node =0
+----------STEP 2 : active.first_char_index =2 : active.origin_node =0
+----------STEP 3 : active.first_char_index =2 : active.origin_node =0
+----------STEP 4 : active.first_char_index =3 : active.origin_node =0
+----------STEP 5 : active.first_char_index =3 : active.origin_node =0
+----------STEP 6 : active.first_char_index =5 : active.origin_node =1
+----------STEP 7 : active.first_char_index =5 : active.origin_node =1
+----------STEP 8 : active.first_char_index =5 : active.origin_node =1
+----------STEP 9 : active.first_char_index =5 : active.origin_node =1
+
+vs
+
+----------STEP 0 : active.first_char_index =0 : active.origin_node =0
+----------STEP 1 : active.first_char_index =1 : active.origin_node =0
+----------STEP 2 : active.first_char_index =2 : active.origin_node =0
+----------STEP 3 : active.first_char_index =2 : active.origin_node =0
+----------STEP 4 : active.first_char_index =3 : active.origin_node =0
+----------STEP 5 : active.first_char_index =3 : active.origin_node =0
+----------STEP 6 : active.first_char_index =5 : active.origin_node =3
+----------STEP 7 : active.first_char_index =5 : active.origin_node =3
+----------STEP 8 : active.first_char_index =5 : active.origin_node =3
+----------STEP 9 : active.first_char_index =5 : active.origin_node =3
+
+(die node zaehlung ist nicht dieselbe; aber d.h. der active span ist korrekt)
+
+:::::::::::::::
+
+----------STEP 9 : active.first_char_index =5 : active.origin_node =1
+SPLIT LeafEdge(3) -> new1 = InnerEdge(3,7,3); new2 = LeafEdge(7)
+DROP TO TAIL
+
+>>>>>>>> CANONIZE active(start=5, stop=9, seq=<1,0,1,0>, source=0)
+         edges(1) = InnerEdge(0,2,2)
+         now start = 7, source = 2
+         edges(1) = LeafEdge(5)
+<<<<<<<< CANONIZE active(start=7, stop=9, seq=<1,0>, source=2)
+
+SPLIT LeafEdge(5) -> new1 = InnerEdge(5,7,4); new2 = LeafEdge(7)
+DROP TO TAIL
+
+!!!
+>>>>>>>> CANONIZE active(start=7, stop=9, seq=<1,0>, source=0)
+         // this returned edge seems to be obsolete!!!
+         edges('1') = InnerEdge(0,2,2) --> edge.span = 2, active.span = 2
+         now start = 9, source = 2
+<<<<<<<< CANONIZE active(start=9, stop=9, source=2)
+
+
+>>>>>>>> CANONIZE active(start=9, stop=10, seq=<0>, source=2)
+         edges(0) = LeafEdge(2)
+<<<<<<<< CANONIZE active(start=9, stop=10, seq=<0>, source=2)
+
+
+::::: versus
+
+!!!
+New prefix : (3,(7,8) "484948")
+<<<<<<<< CANONIZE
+         edges('1') = <start_node=3, end_node=7, first_char=3, last_char=6 "1010" : span = 3
+>>>>>>>> CANONIZE
