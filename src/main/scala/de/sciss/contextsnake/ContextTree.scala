@@ -28,6 +28,8 @@ package de.sciss.contextsnake
 import collection.{SeqView, mutable}
 import annotation.{elidable, tailrec}
 import elidable.INFO
+import collection.generic.CanBuildFrom
+import language.higherKinds
 
 object ContextTree {
   def empty[A]: ContextTree[A] = new Impl[A]
@@ -38,17 +40,61 @@ object ContextTree {
     res
   }
 
+  trait Snake[A] {
+    /**
+     * The size of the snake. Same as `length`
+     */
+    def size: Int
+
+    /**
+     * The number of elements in the snake.
+     */
+    def length: Int
+
+    /**
+     * Removes the last `n` elements in the snake.
+     * Throws an exception if `n` is greater than `length`.
+     *
+     * @param n the number of elements to drop from the end
+     */
+    def trimEnd(n: Int): Unit
+
+    /**
+     * Removes the first `n` elements in the snake.
+     * Throws an exception if `n` is greater than `length`.
+     *
+     * @param n the number of elements to drop from the beginning
+     */
+    def trimStart(n: Int): Unit
+
+    def successors: Iterable[A]
+  }
+
+  private final class SnakeImpl[A](tree: Impl[A]) extends Snake[A] {
+    def size: Int = ???
+    def length: Int = ???
+    def trimEnd(n: Int) { ??? }
+    def trimStart(n: Int) { ??? }
+    def successors: Iterable[A] = ???
+  }
+
   private final class Impl[A] extends ContextTree[A] {
-    private val corpus            = mutable.Buffer.empty[A]
-    private var activeNode: RootOrNode = RootNode
-    private var activeStartIdx    = 0
-    private var activeStopIdx     = 0
+    private val corpus  = mutable.Buffer.empty[A]
+    private val active  = new Cursor(RootNode, 0, 0)
+//    private var activeNode: RootOrNode = RootNode
+//    private var activeStartIdx    = 0
+//    private var activeStopIdx     = 0
 
     @elidable(INFO) private var nodeCount = 1
     @elidable(INFO) private def nextNodeID() = {
       val res = nodeCount
       nodeCount += 1
       res
+    }
+
+    private final class Cursor(var node: RootOrNode, var startIdx: Int, var stopIdx: Int) {
+      def isExplicit  = startIdx >= stopIdx
+      def span        = stopIdx - startIdx
     }
 
     private sealed trait RootOrNodeOrLeaf {
@@ -62,7 +108,7 @@ object ContextTree {
       // consumers of the tree without making a defensive copy
       final var edges = Map.empty[A, Edge]
       final def getEdge(elem: A): Option[Edge] = edges.get(elem)
-      def dropTail(): Unit
+      def dropTail(): Unit  // TODO: ugly here. should be a method in Cursor despite requiring pattern matching
     }
 
     private sealed trait Node extends NodeOrLeaf with RootOrNode {
@@ -76,7 +122,7 @@ object ContextTree {
 
     private final class InnerNode(var tail: RootOrNode) extends Node {
       def dropTail() {
-        activeNode  = tail
+        active.node = tail
         canonize()
       }
     }
@@ -84,7 +130,7 @@ object ContextTree {
     private case object RootNode extends RootOrNode {
       override def toString = "0"
       def dropTail() {
-        activeStartIdx += 1
+        active.startIdx += 1
       }
     }
 
@@ -110,6 +156,10 @@ object ContextTree {
 
     override def toString = "ContextTree(len=" + corpus.length + ")@" + hashCode().toHexString
 
+    def snake(init: TraversableOnce[A]): Snake[A] = {
+      ???
+    }
+
     def contains(elem: A): Boolean = RootNode.edges.contains(elem)
 
     def containsSlice(xs: TraversableOnce[A]): Boolean = {
@@ -132,10 +182,12 @@ object ContextTree {
     }
 
     def size: Int = corpus.length
-    def apply(idx: Int): A = corpus(idx)
-    def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
+    def length: Int = corpus.length
     def isEmpty: Boolean = corpus.isEmpty
     def nonEmpty: Boolean = corpus.nonEmpty
+    def apply(idx: Int): A = corpus(idx)
+    def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
+    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = corpus.to(cbf)
 
     def toDOT(tailEdges: Boolean, sep: String): String = {
       val sb = new StringBuffer()
@@ -173,28 +225,25 @@ object ContextTree {
       sb.toString
     }
 
-    @inline private def isExplicit  = activeStartIdx >= activeStopIdx
-    @inline private def activeSpan  = activeStopIdx - activeStartIdx
-
     @inline private def split(edge: Edge): InnerNode = {
       val startIdx    = edge.startIdx
       val startElem   = corpus(startIdx)
-      val splitIdx    = startIdx + activeSpan
-      val newNode     = new InnerNode(activeNode)
+      val splitIdx    = startIdx + active.span
+      val newNode     = new InnerNode(active.node)
       val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
-      activeNode.edges += ((startElem, newEdge1))
+      active.node.edges += ((startElem, newEdge1))
       val newEdge2    = edge.replaceStart(splitIdx)
       newNode.edges += ((corpus(splitIdx), newEdge2))
       newNode
     }
 
     @inline private def canonize() {
-      while (!isExplicit) {
-        val edge        = activeNode.edges(corpus(activeStartIdx))
-        val edgeSpan    = edge.span
-        if (edgeSpan > activeSpan) return
-        activeStartIdx += edgeSpan
-        activeNode      = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+      while (!active.isExplicit) {
+        val edge         = active.node.edges(corpus(active.startIdx))
+        val edgeSpan     = edge.span
+        if (edgeSpan > active.span) return
+        active.startIdx += edgeSpan
+        active.node      = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
       }
     }
 
@@ -213,12 +262,12 @@ object ContextTree {
       corpus         += elem
 
       @tailrec def loop(prev: RootOrNode) {
-        val parent = if (isExplicit) {
-          if (activeNode.edges.contains(elem)) return
-          activeNode
+        val parent = if (active.isExplicit) {
+          if (active.node.edges.contains(elem)) return
+          active.node
         } else {
-          val edge = activeNode.edges(corpus(activeStartIdx))
-          if (corpus(edge.startIdx + activeSpan) == elem) return
+          val edge = active.node.edges(corpus(active.startIdx))
+          if (corpus(edge.startIdx + active.span) == elem) return
           split(edge)
         }
 
@@ -231,13 +280,13 @@ object ContextTree {
         }
 
         // drop to tail suffix
-        activeNode.dropTail()
+        active.node.dropTail()
 
         loop(parent)
       }
 
       loop(RootNode)
-      activeStopIdx += 1
+      active.stopIdx += 1
       canonize()
     }
   }
@@ -291,12 +340,32 @@ trait ContextTree[A] {
    */
   def contains(elem: A): Boolean
   
-//  def snake(init: TraversableOnce[A])
+//  def indexOfSlice(xs: TraversableOnce[A]): Int
+
+  /**
+   * Creates a new snake through the tree from a given initial sequence.
+   * This initial sequence must be contained in the tree (e.g. `containsSlice` must return `true`),
+   * otherwise an exception is thrown.
+   *
+   * To construct a snake from a particular index range of the tree, use
+   * `snake(view(from, until))`. Note that because the sequence might occur multiple
+   * times in the corpus, this does not guarantee any particular resulting index
+   * into the tree.
+   *
+   * @param init  the sequence to begin with
+   * @return  a new snake whose content is `init`
+   */
+  def snake(init: TraversableOnce[A]): ContextTree.Snake[A]
 
   /**
    * Queries the number of elements in the tree
    */
   def size: Int
+
+  /**
+   * The length of the collection in this tree. Same as `size`
+   */
+  def length: Int
 
   /**
    * Queries whether the collection is empty (has zero elements)
@@ -334,6 +403,15 @@ trait ContextTree[A] {
    * @return  a view of the given range.
    */
   def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]]
+
+  /**
+   * Converts this tree into another collection by copying all elements.
+   *
+   * @param cbf   the builder factory which determines the target collection type
+   * @tparam Col  the target collection type
+   * @return  a new independent collection containing all elements of this tree
+   */
+  def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
 
   /**
    * Helper method to export the tree to GraphViz DOT format.

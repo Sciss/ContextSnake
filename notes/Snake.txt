@@ -1,0 +1,11 @@
+Cursor {
+   def node: RootOrNode
+   def startIdx: Int
+   def stopIdx: Int
+}
+
+SnakeImpl {
+   body: Buffer
+   cursor: Cursor
+}
+
