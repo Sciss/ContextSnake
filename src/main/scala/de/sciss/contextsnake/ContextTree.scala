@@ -96,6 +96,9 @@ object ContextTree {
     }
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
+      override def toString = "ContextTree.Snake(len=" + length +
+        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString
+
       def size: Int = body.length
       def length: Int = body.length
       def trimEnd(n: Int) { ??? }

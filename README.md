@@ -16,7 +16,7 @@ The following short example illustrates the initial suffix tree (you can experim
 
 ```scala
 
-    val c = ContextSnake("BANANA": _*)
+    val c = ContextTree("BANANA": _*)
     Seq[Seq[Char]]("BAN", "ANA", "FOO").map(c.contains) // true, true, false
     c += 'S'
     c.contains("ANANAS") // true
