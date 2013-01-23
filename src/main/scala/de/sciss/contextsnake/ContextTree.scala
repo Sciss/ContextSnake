@@ -139,6 +139,7 @@ object ContextTree {
 //    }
 
     private final class Cursor /* extends Position */ {
+      private var source: RootOrNode = RootNode
       private var edge: EdgeLike = DummyEdge
       private var idx: Int = 0
 
@@ -151,7 +152,7 @@ object ContextTree {
             val found       = edgeOption.isDefined
             if (found) {
               edge          = edgeOption.get
-//              source        = n
+              source        = n
               idx           = edge.startIdx + 1
             }
             found
@@ -160,6 +161,22 @@ object ContextTree {
           val found = corpus(idx) == elem
           if (found) idx += 1
           found
+        }
+      }
+
+      def tryDropToTail(): Boolean = {
+        idx -= 1
+        if (idx > edge.startIdx) {
+          true
+        } else {
+          source match {
+            case Node(tail) =>
+              source  = tail
+              edge    = source.edges(corpus(idx))
+              idx     = edge.stopIdx // - 1
+              true
+            case RootNode => false
+          }
         }
       }
 
@@ -196,11 +213,14 @@ object ContextTree {
       def trimStart(n: Int) {
         val sz  = size
         if (n > sz) throw new IndexOutOfBoundsException((n - sz).toString)
-        var m   = n
-        while (m > 0) {
-          ???
+        var m   = 0
+        while (m < n) {
+//          if (!c.tryDropToTail()) {
+//            body.trimStart(n)
+//          }
 //          c.dropToTail()
-          m -= 1
+          assert (c.tryDropToTail())
+          m += 1
         }
         body.trimStart(n)
       }
@@ -229,10 +249,9 @@ object ContextTree {
 
       def dropToTail() {
         source match {
-          case i: InnerNode =>
-            val old = source
-            DEBUG_LOG("DROP: Suffix link from " + old + " to " + i.tail)
-            source = i.tail
+          case Node(tail) =>
+            DEBUG_LOG("DROP: Suffix link from " + source + " to " + tail)
+            source = tail
           case RootNode =>
             DEBUG_LOG("DROP: At root")
             startIdx += 1
@@ -282,17 +301,23 @@ object ContextTree {
 //      final def getEdge(elem: A): Option[Edge] = edges.get(elem)
     }
 
-    private sealed trait Node extends NodeOrLeaf with RootOrNode {
-      @elidable(INFO) val id = nextNodeID()
-      @elidable(INFO) override def toString = id.toString
-    }
+//    private sealed trait Node extends NodeOrLeaf with RootOrNode {
+//      @elidable(INFO) val id = nextNodeID()
+//      @elidable(INFO) override def toString = id.toString
+//    }
 
     private case object Leaf extends NodeOrLeaf
 //    {
 //      def getEdge(elem: A): Option[Edge] = None
 //    }
 
-    private final class InnerNode(var tail: RootOrNode) extends Node
+    private object Node {
+      def unapply(n: Node): Option[RootOrNode] = Some(n.tail)
+    }
+    private final class Node(var tail: RootOrNode) extends NodeOrLeaf with RootOrNode {
+      @elidable(INFO) val id = nextNodeID()
+      @elidable(INFO) override def toString = id.toString
+    }
 
     private case object RootNode extends RootOrNode {
       override def toString = "0"
@@ -317,7 +342,7 @@ object ContextTree {
       def targetNode: RootOrNodeOrLeaf = RootNode
     }
 
-    private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: InnerNode) extends Edge {
+    private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
       override def toString = "InnerEdge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
       def span = stopIdx - startIdx
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
@@ -373,15 +398,15 @@ object ContextTree {
               leafCnt += 1
               sb.append( t + " [label=\"" + str + "\"];\n")
               sb.append( "  " + t + " [shape=point];\n")
-            case i: InnerNode =>
-              sb.append(i.toString + " [label=\"" + str + "\"];\n")
-              appendNode(i)
+            case n: Node =>
+              sb.append(n.toString + " [label=\"" + str + "\"];\n")
+              appendNode(n)
           }
         }
 
         if (tailEdges) source match {
-          case i: InnerNode =>
-            val target = i.tail
+          case Node(tail) =>
+            val target = tail
             sb.append("  " + source + " -> " + target + " [style=dotted];\n")
           case RootNode =>
         }
@@ -392,15 +417,15 @@ object ContextTree {
       sb.toString
     }
 
-    @inline private def split(edge: Edge): InnerNode = {
+    @inline private def split(edge: Edge): Node = {
       val startIdx    = edge.startIdx
       val startElem   = corpus(startIdx)
       val splitIdx    = startIdx + active.span
-      val newNode     = new InnerNode(active.source)
+      val newNode     = new Node(active.source)
       val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
       active.source.edges += ((startElem, newEdge1))
       val newEdge2    = edge.replaceStart(splitIdx)
-      newNode.edges += ((corpus(splitIdx), newEdge2))
+      newNode.edges  += ((corpus(splitIdx), newEdge2))
       DEBUG_LOG("SPLIT: " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }
@@ -423,9 +448,9 @@ object ContextTree {
 
       def addLink(n: RootOrNode, parent: RootOrNode) {
         n match {
-          case i: InnerNode =>
-            DEBUG_LOG("LINK: from " + i + " to " + parent)
-            i.tail = parent
+          case n: Node =>
+            DEBUG_LOG("LINK: from " + n + " to " + parent)
+            n.tail = parent
           case RootNode =>
         }
       }
