@@ -99,15 +99,17 @@ object ContextTree {
       final def span        = stopIdx - startIdx
     }
 
-    private final class Cursor extends Position
+    private final class Cursor extends Position {
+      var target: RootOrNodeOrLeaf = RootNode
+    }
 
     private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
-      var node: RootOrNode = RootNode
+      var source: RootOrNode = RootNode
 
       def dropToTail() {
-        node match {
+        source match {
           case i: InnerNode =>
-            node = i.tail
+            source = i.tail
             canonize()
           case RootNode =>
             startIdx += 1
@@ -116,11 +118,11 @@ object ContextTree {
 
       def canonize() {
         while (!isExplicit) {
-          val edge       = node.edges(corpus(startIdx))
+          val edge       = source.edges(corpus(startIdx))
           val edgeSpan   = edge.span
           if (edgeSpan > span) return
           startIdx      += edgeSpan
-          node           = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+          source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
         }
       }
     }
@@ -176,12 +178,33 @@ object ContextTree {
     override def toString = "ContextTree(len=" + corpus.length + ")@" + hashCode().toHexString
 
     def snake(init: TraversableOnce[A]): Snake[A] = {
+      val body = init.toBuffer
+      val m = new Cursor
+      var n: RootOrNodeOrLeaf = RootNode
+      init.foreach { e =>
+        if (m.startIdx < m.stopIdx) {
+          if (corpus(m.startIdx) != e) throw new NoSuchElementException(e.toString) // not found in implicit node
+          m.startIdx += 1
+        } else n.getEdge(e) match {
+          case None       => return throw new NoSuchElementException(e.toString)    // reached end of leaf node
+          case Some(edge) =>
+            n           = edge.targetNode
+            m.startIdx  = edge.startIdx + 1
+            m.stopIdx   = edge.stopIdx
+        }
+      }
+
+
       ???
     }
 
     def contains(elem: A): Boolean = RootNode.edges.contains(elem)
 
     def containsSlice(xs: TraversableOnce[A]): Boolean = {
+      initCursor(new Cursor, xs)
+    }
+
+    private def initCursor(c: Cursor, xs: TraversableOnce[A]): Boolean = {
 //      if(xs.isEmpty) return true
 //      val it = xs.toIterator
 //      RootNode.getEdge(it.next()) match {
@@ -203,18 +226,16 @@ object ContextTree {
 //          true
 //      }
 
-      val m = new Cursor
-      var n: RootOrNodeOrLeaf = RootNode
       xs.foreach { e =>
-        if (m.startIdx < m.stopIdx) {
-          if (corpus(m.startIdx) != e) return false // not found in implicit node
-          m.startIdx += 1
-        } else n.getEdge(e) match {
+        if (c.startIdx < c.stopIdx) {
+          if (corpus(c.startIdx) != e) return false // not found in implicit node
+          c.startIdx += 1
+        } else c.target.getEdge(e) match {
           case None       => return false           // reached end of leaf node
           case Some(edge) =>
-            n           = edge.targetNode
-            m.startIdx  = edge.startIdx + 1
-            m.stopIdx   = edge.stopIdx
+            c.target    = edge.targetNode
+            c.startIdx  = edge.startIdx + 1
+            c.stopIdx   = edge.stopIdx
         }
       }
       true
@@ -268,9 +289,9 @@ object ContextTree {
       val startIdx    = edge.startIdx
       val startElem   = corpus(startIdx)
       val splitIdx    = startIdx + active.span
-      val newNode     = new InnerNode(active.node)
+      val newNode     = new InnerNode(active.source)
       val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
-      active.node.edges += ((startElem, newEdge1))
+      active.source.edges += ((startElem, newEdge1))
       val newEdge2    = edge.replaceStart(splitIdx)
       newNode.edges += ((corpus(splitIdx), newEdge2))
       newNode
@@ -292,10 +313,10 @@ object ContextTree {
 
       @tailrec def loop(prev: RootOrNode) {
         val parent = if (active.isExplicit) {
-          if (active.node.edges.contains(elem)) return
-          active.node
+          if (active.source.edges.contains(elem)) return
+          active.source
         } else {
-          val edge = active.node.edges(corpus(active.startIdx))
+          val edge = active.source.edges(corpus(active.startIdx))
           if (corpus(edge.startIdx + active.span) == elem) return
           split(edge)
         }
