@@ -135,32 +135,44 @@ object ContextTree {
       res
     }
 
-    private sealed trait Position {
-      final var startIdx: Int = 0
-      final var stopIdx: Int = 0
+//    private sealed trait Position {
+//    }
 
-      final def isExplicit  = startIdx >= stopIdx
-      final def span        = stopIdx - startIdx
-    }
+    private final class Cursor /* extends Position */ {
+      private var edge: EdgeLike = DummyEdge
+      private var idx: Int = 0
 
-    private final class Cursor extends Position {
-      var target: RootOrNodeOrLeaf = RootNode
+      @inline private def edgeExhausted = idx == edge.stopIdx
 
       def tryMove(elem: A): Boolean = {
-        if (startIdx < stopIdx) {
-          val found = corpus(startIdx) == elem
-          if (found) startIdx += 1
-          found
+        if (edgeExhausted) edge.targetNode match {
+          case n: RootOrNode =>
+            val edgeOption  = n.edges.get(elem)
+            val found       = edgeOption.isDefined
+            if (found) {
+              edge          = edgeOption.get
+//              source        = n
+              idx           = edge.startIdx + 1
+            }
+            found
+          case Leaf => false
         } else {
-          val edgeOption  = target.getEdge(elem)
-          val found       = edgeOption.isDefined
-          if (found) {
-            val edge  = edgeOption.get
-            target    = edge.targetNode
-            startIdx  = edge.startIdx + 1
-            stopIdx   = edge.stopIdx
-          }
+          val found = corpus(idx) == elem
+          if (found) idx += 1
           found
+        }
+      }
+
+      def successors: Iterator[A] = {
+        if (edgeExhausted) {
+          edge.targetNode match {
+            case n: RootOrNode =>
+              n.edges.keysIterator
+            case Leaf =>
+              Iterator.empty
+          }
+        } else {
+          Iterator.single(corpus(idx))
         }
       }
     }
@@ -172,25 +184,26 @@ object ContextTree {
       def size: Int = body.length
       def length: Int = body.length
 
-      def successors: Iterator[A] = {
-        if (c.isExplicit) {
-          c.target match {
-            case n: RootOrNode =>
-              n.edges.keysIterator
-            case Leaf =>
-              Iterator.empty
-          }
-        } else {
-          Iterator.single(corpus(c.startIdx))
-        }
-      }
+      def successors: Iterator[A] = c.successors
 
       def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
       def apply(idx: Int): A = body(idx)
 
-      def trimEnd(n: Int) { ??? }
+      def trimEnd(n: Int) {
+        ???
+      }
 
-      def trimStart(n: Int) { ??? }
+      def trimStart(n: Int) {
+        val sz  = size
+        if (n > sz) throw new IndexOutOfBoundsException((n - sz).toString)
+        var m   = n
+        while (m > 0) {
+          ???
+//          c.dropToTail()
+          m -= 1
+        }
+        body.trimStart(n)
+      }
 
       def appendAll(xs: TraversableOnce[A]) {
         xs.foreach(add1)
@@ -206,18 +219,13 @@ object ContextTree {
       }
     }
 
-    private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
+    private object active /* extends Position */ /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
       var source: RootOrNode = RootNode
+      var startIdx: Int = 0
+      var stopIdx: Int = 0
 
-      override def toString = "active(start=" + startIdx + ", stop=" + stopIdx + {
-          val num = span
-          if (num > 0) {
-            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
-              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
-          } else {
-            ""
-          }
-        } + ", source=" + source + ")"
+      def isExplicit  = startIdx >= stopIdx
+      def span        = stopIdx - startIdx
 
       def dropToTail() {
         source match {
@@ -248,11 +256,22 @@ object ContextTree {
         }
         DEBUG_LOG("<<<< CANONIZE " + active)
       }
+
+      override def toString = "active(start=" + startIdx + ", stop=" + stopIdx + {
+          val num = span
+          if (num > 0) {
+            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
+              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
+          } else {
+            ""
+          }
+        } + ", source=" + source + ")"
     }
 
-    private sealed trait RootOrNodeOrLeaf {
-      def getEdge(elem: A): Option[Edge]
-    }
+    private sealed trait RootOrNodeOrLeaf
+//    {
+//      def getEdge(elem: A): Option[Edge]
+//    }
     private sealed trait NodeOrLeaf extends RootOrNodeOrLeaf
     private sealed trait RootOrNode extends RootOrNodeOrLeaf {
       // use immutable.Set because we'll have many leave nodes,
@@ -260,7 +279,7 @@ object ContextTree {
       // ; another advantage is that we can return a view to
       // consumers of the tree without making a defensive copy
       final var edges = Map.empty[A, Edge]
-      final def getEdge(elem: A): Option[Edge] = edges.get(elem)
+//      final def getEdge(elem: A): Option[Edge] = edges.get(elem)
     }
 
     private sealed trait Node extends NodeOrLeaf with RootOrNode {
@@ -268,9 +287,10 @@ object ContextTree {
       @elidable(INFO) override def toString = id.toString
     }
 
-    private case object Leaf extends NodeOrLeaf {
-      def getEdge(elem: A): Option[Edge] = None
-    }
+    private case object Leaf extends NodeOrLeaf
+//    {
+//      def getEdge(elem: A): Option[Edge] = None
+//    }
 
     private final class InnerNode(var tail: RootOrNode) extends Node
 
@@ -278,12 +298,23 @@ object ContextTree {
       override def toString = "0"
     }
 
-    private sealed trait Edge {
+    private sealed trait EdgeLike {
       def startIdx: Int
       def stopIdx: Int
       def span: Int
+      def targetNode: RootOrNodeOrLeaf
+    }
+
+    private sealed trait Edge extends EdgeLike {
       def targetNode: NodeOrLeaf
       def replaceStart(newStart: Int): Edge
+    }
+
+    private case object DummyEdge extends EdgeLike {
+      def startIdx: Int = 0
+      def stopIdx: Int = 0
+      def span: Int = 0
+      def targetNode: RootOrNodeOrLeaf = RootNode
     }
 
     private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: InnerNode) extends Edge {
