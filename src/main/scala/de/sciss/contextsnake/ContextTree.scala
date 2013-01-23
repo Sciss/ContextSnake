@@ -29,7 +29,6 @@ import collection.{SeqView, mutable}
 import annotation.{elidable, tailrec}
 import elidable.INFO
 import collection.generic.CanBuildFrom
-import language.higherKinds
 
 object ContextTree {
   def empty[A]: ContextTree[A] = new Impl[A]
@@ -95,6 +94,26 @@ object ContextTree {
     private final class Cursor(var node: RootOrNode, var startIdx: Int, var stopIdx: Int) {
       def isExplicit  = startIdx >= stopIdx
       def span        = stopIdx - startIdx
+
+      def dropToTail() {
+        node match {
+          case i: InnerNode =>
+            node = i.tail
+            canonize()
+          case RootNode =>
+            startIdx += 1
+        }
+      }
+
+      def canonize() {
+        while (!isExplicit) {
+          val edge       = node.edges(corpus(startIdx))
+          val edgeSpan   = edge.span
+          if (edgeSpan > span) return
+          startIdx      += edgeSpan
+          node           = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+        }
+      }
     }
 
     private sealed trait RootOrNodeOrLeaf {
@@ -108,7 +127,6 @@ object ContextTree {
       // consumers of the tree without making a defensive copy
       final var edges = Map.empty[A, Edge]
       final def getEdge(elem: A): Option[Edge] = edges.get(elem)
-      def dropTail(): Unit  // TODO: ugly here. should be a method in Cursor despite requiring pattern matching
     }
 
     private sealed trait Node extends NodeOrLeaf with RootOrNode {
@@ -120,18 +138,10 @@ object ContextTree {
       def getEdge(elem: A): Option[Edge] = None
     }
 
-    private final class InnerNode(var tail: RootOrNode) extends Node {
-      def dropTail() {
-        active.node = tail
-        canonize()
-      }
-    }
+    private final class InnerNode(var tail: RootOrNode) extends Node
 
     private case object RootNode extends RootOrNode {
       override def toString = "0"
-      def dropTail() {
-        active.startIdx += 1
-      }
     }
 
     private sealed trait Edge {
@@ -237,16 +247,6 @@ object ContextTree {
       newNode
     }
 
-    @inline private def canonize() {
-      while (!active.isExplicit) {
-        val edge         = active.node.edges(corpus(active.startIdx))
-        val edgeSpan     = edge.span
-        if (edgeSpan > active.span) return
-        active.startIdx += edgeSpan
-        active.node      = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
-      }
-    }
-
     def +=(elem: A): this.type = { add1(elem); this }
 
     def append(elem: A*) {
@@ -280,14 +280,14 @@ object ContextTree {
         }
 
         // drop to tail suffix
-        active.node.dropTail()
+        active.dropToTail()
 
         loop(parent)
       }
 
       loop(RootNode)
       active.stopIdx += 1
-      canonize()
+      active.canonize()
     }
   }
 }

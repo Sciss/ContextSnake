@@ -10,6 +10,6 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "1.9.1" % "test"
 
 retrieveManaged := true
 
-scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature")
+scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature", "-language:higherKinds")
 
 initialCommands in console := "import de.sciss.contextsnake._"
