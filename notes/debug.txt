@@ -117,3 +117,29 @@ digraph suffixes {
 }
 
 DOES NOT FIND: Vector(0, 1, 0, 0)
+
+: : : : : : : : :
+which should be the active point?
+
+corpus =
+1, 0, 0, 1, 0, 1, 0, 1, 0 (,0)
+0  1  2  3  4  5  6  7  8  9
+
+   0, 0, 1, 0, 1, 0, 1, 0, 0  --> already there
+      0, 1, 0, 1, 0, 1, 0, 0  --> already there
+         1, 0, 1, 0, 1, 0, 0  --> already there
+            0, 1, 0, 1, 0, 0  --> THIS ONE
+
+looking at the result... node #3 is the correct new splitted node
+
+0  1  2  3  4  5  6  7  8  9
+            0, 1, 0, 1, 0, 0  --> Ok now
+               1, 0, 1, 0, 0  --> THIS ONE
+
+looking at the result... node #4 is the correct new splitted node
+
+               1, 0, 1, 0, 0  --> Ok now
+                  0, 1, 0, 0  --> THIS ONE --> seems it wasn't handled
+
+my intuition stays active.startIdx should be 4, but it's actually 5; so...?
+

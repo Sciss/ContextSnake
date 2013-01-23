@@ -123,11 +123,6 @@ object ContextTree {
 
   private final class Impl[A] extends ContextTree[A] {
     private val corpus  = mutable.Buffer.empty[A]
-//    private val active  = new Cursor // (RootNode, 0, 0)
-//    private var activeNode: RootOrNode = RootNode
-//    private var activeStartIdx    = 0
-//    private var activeStopIdx     = 0
-
     @elidable(INFO) private var nodeCount = 1
     @elidable(INFO) private def nextNodeID() = {
       val res = nodeCount
@@ -208,6 +203,16 @@ object ContextTree {
 
     private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
       var source: RootOrNode = RootNode
+
+      override def toString = "active(start=" + startIdx + ", stop=" + stopIdx + {
+          val num = span
+          if (num > 0) {
+            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
+              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
+          } else {
+            ""
+          }
+        } + ", source=" + source + ")"
 
       def dropToTail() {
         source match {
