@@ -39,7 +39,17 @@ object ContextTree {
     res
   }
 
-  trait Snake[A] {
+  trait Like[A] {
+    def size: Int
+    def length: Int
+    def +=(elem: A): this.type
+    def append(elems: A*): Unit
+    def appendAll(xs: TraversableOnce[A]): Unit
+    def apply(idx: Int): A
+    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+  }
+
+  trait Snake[A] extends Like[A] {
     /**
      * The size of the snake. Same as `length`
      */
@@ -67,6 +77,48 @@ object ContextTree {
     def trimStart(n: Int): Unit
 
     def successors: Iterator[A]
+
+    /**
+     * Appends a single element to the snake. Throws an exception if the element is
+     * not a possible successor of the current body.
+     *
+     * @param elem the element to append
+     */
+    def +=(elem: A): this.type
+
+    /**
+     * Appends multiple elements to the snake. Throws an exception if the elements do
+     * not form a valid growth path from the current body.
+     *
+     * @param elems the elements to append
+     */
+    def append(elems: A*): Unit
+
+    /**
+     * Appends all elements of a collection to the snake. Throws an exception if the elements do
+     * not form a valid growth path from the current body.
+     *
+     * @param xs  the collection whose elements should be appended
+     */
+    def appendAll(xs: TraversableOnce[A]): Unit
+
+    /**
+     * Retrieves the element from the snake's body at a given position. If the position
+     * is less than zero or greater than or equal to the snake's length, an exception is thrown.
+     *
+     * @param idx the index into the snake
+     * @return  the element at the given index
+     */
+    def apply(idx: Int): A
+
+    /**
+     * Copies the snake's current body to a new independent collection.
+     *
+     * @param cbf   the builder factory for the target collection
+     * @tparam Col  the type of the target collection
+     * @return  the copied collection
+     */
+    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
   private final class Impl[A] extends ContextTree[A] {
@@ -101,8 +153,7 @@ object ContextTree {
 
       def size: Int = body.length
       def length: Int = body.length
-      def trimEnd(n: Int) { ??? }
-      def trimStart(n: Int) { ??? }
+
       def successors: Iterator[A] = {
         if (c.isExplicit) {
           c.target match {
@@ -114,6 +165,25 @@ object ContextTree {
         } else {
           Iterator.single(corpus(c.startIdx))
         }
+      }
+
+      def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]) = sys.error("TODO"): Col[A]
+      def apply(idx: Int): A = body(idx)
+
+      def trimEnd(n: Int) { ??? }
+
+      def trimStart(n: Int) { ??? }
+
+      def appendAll(xs: TraversableOnce[A]) {
+        ???
+      }
+
+      def append(elems: A*) {
+        ???
+      }
+
+      def +=(elem: A): this.type = {
+        ???
       }
     }
 
@@ -328,7 +398,7 @@ object ContextTree {
  *
  * @tparam A  the element type of the structure
  */
-trait ContextTree[A] {
+trait ContextTree[A] extends ContextTree.Like[A] {
   /**
    * Appends an element to the tree.
    *
