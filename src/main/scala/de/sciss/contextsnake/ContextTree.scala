@@ -1,6 +1,6 @@
 /*
- *  ContextSnake.scala
- *  (ContextSnake)
+ *  ContextTree.scala
+ *  (ContextTree)
  *
  *  Copyright (c) 2013 Hanns Holger Rutz. All rights reserved.
  *
@@ -25,23 +25,21 @@
 
 package de.sciss.contextsnake
 
-import collection.mutable
+import collection.{SeqView, mutable}
 import annotation.{elidable, tailrec}
 import elidable.INFO
 
-object ContextSnake {
-  def empty[A]: ContextSnake[A] = new Impl[A]
+object ContextTree {
+  def empty[A]: ContextTree[A] = new Impl[A]
 
-  def apply[A](elem: A*): ContextSnake[A] = {
+  def apply[A](elem: A*): ContextTree[A] = {
     val res = empty[A]
     res.appendAll(elem)
     res
   }
 
-  private final class Impl[A] extends ContextSnake[A] {
+  private final class Impl[A] extends ContextTree[A] {
     private val corpus            = mutable.Buffer.empty[A]
-//    private val tails             = mutable.Map.empty[Int, Int] // withDefaultValue -1
-//    private val edges             = mutable.Map.empty[EdgeKey, Edge]
     private var activeNode: RootOrNode = RootNode
     private var activeStartIdx    = 0
     private var activeStopIdx     = 0
@@ -53,8 +51,6 @@ object ContextSnake {
       res
     }
 
-//    private type EdgeKey  = (Int, A)  // source-node-id -> first-element-on-edge-label
-
     private sealed trait RootOrNodeOrLeaf {
       def getEdge(elem: A): Option[Edge]
     }
@@ -62,6 +58,8 @@ object ContextSnake {
     private sealed trait RootOrNode extends RootOrNodeOrLeaf {
       // use immutable.Set because we'll have many leave nodes,
       // and immutable.Set.empty is cheap compared to mutable.Set
+      // ; another advantage is that we can return a view to
+      // consumers of the tree without making a defensive copy
       final var edges = Map.empty[A, Edge]
       final def getEdge(elem: A): Option[Edge] = edges.get(elem)
       def dropTail(): Unit
@@ -74,8 +72,6 @@ object ContextSnake {
 
     private case object Leaf extends NodeOrLeaf {
       def getEdge(elem: A): Option[Edge] = None
-//      @elidable(INFO) val id = nextNodeID()
-//      @elidable(INFO) override def toString = id.toString
     }
 
     private final class InnerNode(var tail: RootOrNode) extends Node {
@@ -90,16 +86,7 @@ object ContextSnake {
       def dropTail() {
         activeStartIdx += 1
       }
-//      private def unsup(op: String) = throw new UnsupportedOperationException(op + " on the root node")
-//      def tail = unsup("tail")
-//      def tail_=(node: Int) { unsup("tail_=") }
-//      var edges = Map.empty[A, Edge]
     }
-
-//    private def rootNode: Node = RootNode
-
-//    private sealed trait EdgeOption
-//    private case object EdgeNone extends EdgeOption
 
     private sealed trait Edge {
       def startIdx: Int
@@ -121,9 +108,11 @@ object ContextSnake {
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
 
-    override def toString = "ContextSnake(len=" + corpus.length + ")@" + hashCode().toHexString
+    override def toString = "ContextTree(len=" + corpus.length + ")@" + hashCode().toHexString
 
-    def contains(xs: TraversableOnce[A]): Boolean = {
+    def contains(elem: A): Boolean = RootNode.edges.contains(elem)
+
+    def containsSlice(xs: TraversableOnce[A]): Boolean = {
       var n: RootOrNodeOrLeaf = RootNode
       var start = 0
       var stop  = 0
@@ -144,10 +133,12 @@ object ContextSnake {
 
     def size: Int = corpus.length
     def apply(idx: Int): A = corpus(idx)
+    def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
+    def isEmpty: Boolean = corpus.isEmpty
+    def nonEmpty: Boolean = corpus.nonEmpty
 
     def toDOT(tailEdges: Boolean, sep: String): String = {
-//      val elemSet = corpus.toSet
-      val sb      = new StringBuffer()
+      val sb = new StringBuffer()
       sb.append("digraph suffixes {\n")
 
       var leafCnt = 0
@@ -258,7 +249,7 @@ object ContextSnake {
  *
  * @tparam A  the element type of the structure
  */
-trait ContextSnake[A] {
+trait ContextTree[A] {
   /**
    * Appends an element to the tree.
    *
@@ -284,16 +275,38 @@ trait ContextSnake[A] {
 
   /**
    * Tests whether a given sub-sequence is contained in the tree.
+   * This is a very fast operation taking O(|xs|).
    *
    * @param xs  the sequence to look for
    * @return    `true` if the sequence is included in the tree, `false` otherwise
    */
-  def contains(xs: TraversableOnce[A]): Boolean
+  def containsSlice(xs: TraversableOnce[A]): Boolean
+
+  /**
+   * Tests whether an element is contained in the tree.
+   * This is a constant time operation.
+   *
+   * @param elem  the element to look for
+   * @return    `true` if the element is included in the tree, `false` otherwise
+   */
+  def contains(elem: A): Boolean
+  
+//  def snake(init: TraversableOnce[A])
 
   /**
    * Queries the number of elements in the tree
    */
   def size: Int
+
+  /**
+   * Queries whether the collection is empty (has zero elements)
+   */
+  def isEmpty: Boolean
+
+  /**
+   * Queries whether the collection non-empty (has one or more elements)
+   */
+  def nonEmpty: Boolean
 
   /**
    * Queries an element at a given index. Throws an exception if the `idx` argument
@@ -303,6 +316,24 @@ trait ContextSnake[A] {
    * @return  the element at the given index
    */
   def apply(idx: Int): A
+
+  /**
+   * Provides a view of a range of the underlying buffer. Technically, because
+   * the underlying buffer is mutable, this view would be subject to mutations as well until
+   * a copy is built. However, since the tree is append-only, the portion visible
+   * in the view will never change.
+   *
+   * Note that, like the `view` method in `collection.mutable.Buffer`, the range is
+   * clipped to the length of the underlying buffer _at this moment_. For example,
+   * if the buffer currently has 6 elements, a `view(7,8)` is treated as `view(6,6)`
+   * and will always be empty. Therefore it is save to treat the view as immutable.
+   *
+   * @param from  the start index into the collection
+   * @param until the stop index (exclusive) into the collection
+   *
+   * @return  a view of the given range.
+   */
+  def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]]
 
   /**
    * Helper method to export the tree to GraphViz DOT format.
