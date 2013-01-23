@@ -145,6 +145,24 @@ object ContextTree {
 
     private final class Cursor extends Position {
       var target: RootOrNodeOrLeaf = RootNode
+
+      def tryMove(elem: A): Boolean = {
+        if (startIdx < stopIdx) {
+          val found = corpus(startIdx) == elem
+          if (found) startIdx += 1
+          found
+        } else {
+          val edgeOption  = target.getEdge(elem)
+          val found       = edgeOption.isDefined
+          if (found) {
+            val edge  = edgeOption.get
+            target    = edge.targetNode
+            startIdx  = edge.startIdx + 1
+            stopIdx   = edge.stopIdx
+          }
+          found
+        }
+      }
     }
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
@@ -167,7 +185,7 @@ object ContextTree {
         }
       }
 
-      def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]) = sys.error("TODO"): Col[A]
+      def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
       def apply(idx: Int): A = body(idx)
 
       def trimEnd(n: Int) { ??? }
@@ -175,15 +193,16 @@ object ContextTree {
       def trimStart(n: Int) { ??? }
 
       def appendAll(xs: TraversableOnce[A]) {
-        ???
+        xs.foreach(add1)
       }
 
-      def append(elems: A*) {
-        ???
-      }
+      def append(elems: A*) { appendAll(elems) }
 
-      def +=(elem: A): this.type = {
-        ???
+      def +=(elem: A): this.type = { snakeAdd1(elem); this }
+
+      private def snakeAdd1(elem: A) {
+        if (!c.tryMove(elem)) throw new NoSuchElementException(elem.toString)
+        body += elem
       }
     }
 
@@ -264,7 +283,7 @@ object ContextTree {
     def snake(init: TraversableOnce[A]): Snake[A] = {
       val body  = init.toBuffer
       val c     = new Cursor
-      if (!initCursor(c, init)) throw new NoSuchElementException(init.toString)
+      if (!init.forall(c.tryMove)) throw new NoSuchElementException(init.toString)
 
       new SnakeImpl(body, c)
     }
@@ -272,23 +291,8 @@ object ContextTree {
     def contains(elem: A): Boolean = RootNode.edges.contains(elem)
 
     def containsSlice(xs: TraversableOnce[A]): Boolean = {
-      initCursor(new Cursor, xs)
-    }
-
-    private def initCursor(c: Cursor, xs: TraversableOnce[A]): Boolean = {
-      xs.foreach { e =>
-        if (c.startIdx < c.stopIdx) {
-          if (corpus(c.startIdx) != e) return false // not found in implicit node
-          c.startIdx += 1
-        } else c.target.getEdge(e) match {
-          case None       => return false           // reached end of leaf node
-          case Some(edge) =>
-            c.target    = edge.targetNode
-            c.startIdx  = edge.startIdx + 1
-            c.stopIdx   = edge.stopIdx
-        }
-      }
-      true
+      val c = new Cursor
+      xs.forall(c.tryMove)
     }
 
     def size: Int = corpus.length

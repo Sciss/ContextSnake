@@ -9,3 +9,10 @@ SnakeImpl {
    cursor: Cursor
 }
 
+::::::::::
+
+Cursor {
+   sourceNode : RootOrNode
+   startIdx: Int		// <- Edge
+   stopIdx: Int			// <- Edge
+   targetNode: NodeOrLeaf	// <- Edge
