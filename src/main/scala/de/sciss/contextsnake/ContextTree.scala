@@ -66,15 +66,7 @@ object ContextTree {
      */
     def trimStart(n: Int): Unit
 
-    def successors: Iterable[A]
-  }
-
-  private final class SnakeImpl[A](tree: Impl[A]) extends Snake[A] {
-    def size: Int = ???
-    def length: Int = ???
-    def trimEnd(n: Int) { ??? }
-    def trimStart(n: Int) { ??? }
-    def successors: Iterable[A] = ???
+    def successors: Iterator[A]
   }
 
   private final class Impl[A] extends ContextTree[A] {
@@ -101,6 +93,25 @@ object ContextTree {
 
     private final class Cursor extends Position {
       var target: RootOrNodeOrLeaf = RootNode
+    }
+
+    private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
+      def size: Int = body.length
+      def length: Int = body.length
+      def trimEnd(n: Int) { ??? }
+      def trimStart(n: Int) { ??? }
+      def successors: Iterator[A] = {
+        if (c.isExplicit) {
+          c.target match {
+            case n: RootOrNode =>
+              n.edges.keysIterator
+            case Leaf =>
+              Iterator.empty
+          }
+        } else {
+          Iterator.single(corpus(c.startIdx))
+        }
+      }
     }
 
     private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
@@ -178,24 +189,11 @@ object ContextTree {
     override def toString = "ContextTree(len=" + corpus.length + ")@" + hashCode().toHexString
 
     def snake(init: TraversableOnce[A]): Snake[A] = {
-      val body = init.toBuffer
-      val m = new Cursor
-      var n: RootOrNodeOrLeaf = RootNode
-      init.foreach { e =>
-        if (m.startIdx < m.stopIdx) {
-          if (corpus(m.startIdx) != e) throw new NoSuchElementException(e.toString) // not found in implicit node
-          m.startIdx += 1
-        } else n.getEdge(e) match {
-          case None       => return throw new NoSuchElementException(e.toString)    // reached end of leaf node
-          case Some(edge) =>
-            n           = edge.targetNode
-            m.startIdx  = edge.startIdx + 1
-            m.stopIdx   = edge.stopIdx
-        }
-      }
+      val body  = init.toBuffer
+      val c     = new Cursor
+      if (!initCursor(c, init)) throw new NoSuchElementException(init.toString)
 
-
-      ???
+      new SnakeImpl(body, c)
     }
 
     def contains(elem: A): Boolean = RootNode.edges.contains(elem)
@@ -205,27 +203,6 @@ object ContextTree {
     }
 
     private def initCursor(c: Cursor, xs: TraversableOnce[A]): Boolean = {
-//      if(xs.isEmpty) return true
-//      val it = xs.toIterator
-//      RootNode.getEdge(it.next()) match {
-//        case None => false
-//        case Some(edge) =>
-//          val m       = new Cursor
-//          m.node      = RootNode
-//          m.startIdx  = edge.startIdx + 1
-//          m.stopIdx   = edge.stopIdx
-//          while(it.hasNext) {
-//            val e = it.next()
-//            if (m.startIdx < m.stopIdx) {
-//              if (corpus(m.startIdx) != e) return false // not found in implicit node
-//              m.startIdx += 1
-//            } else edge.targetNode match {
-//              case m.
-//            }
-//          }
-//          true
-//      }
-
       xs.foreach { e =>
         if (c.startIdx < c.stopIdx) {
           if (corpus(c.startIdx) != e) return false // not found in implicit node
@@ -276,7 +253,7 @@ object ContextTree {
           case i: InnerNode =>
             val target = i.tail
             sb.append("  " + source + " -> " + target + " [style=dotted];\n")
-          case _ =>
+          case RootNode =>
         }
       }
       appendNode(RootNode)
@@ -326,7 +303,7 @@ object ContextTree {
         parent.edges += ((elem, newEdge))
         prev match {
           case i: InnerNode => i.tail = parent
-          case _ =>
+          case RootNode =>
         }
 
         // drop to tail suffix
