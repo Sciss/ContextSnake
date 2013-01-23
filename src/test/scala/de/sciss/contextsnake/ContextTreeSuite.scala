@@ -5,9 +5,9 @@ import org.scalatest.FunSuite
 class ContextTreeSuite extends FunSuite {
   val BROKEN  = true
 
-  val seed    = 0L
-  val N       = 8 // 10000 // corpus size. higher than 10k gets slow because of the `.tails` iterations
-  val M       = 2  // 26    // maximum number of different symbols
+  val seed    = 5L
+  val N       = 10  // 10000 // corpus size. higher than 10k gets slow because of the `.tails` iterations
+  val M       = 2   // 26    // maximum number of different symbols
 
   test("sub-sequences searches are performed on the suffix tree") {
     val r   = new util.Random(seed)

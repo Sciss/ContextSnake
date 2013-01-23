@@ -211,12 +211,10 @@ object ContextTree {
 
       def dropToTail() {
         source match {
-          case i: InnerNode =>
-            source = i.tail
-            canonize()
-          case RootNode =>
-            startIdx += 1
+          case i: InnerNode => source = i.tail
+          case RootNode     => startIdx += 1
         }
+        canonize()
       }
 
       def canonize() {
@@ -346,8 +344,8 @@ object ContextTree {
       val newNode     = new InnerNode(active.source)
       val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
       active.source.edges += ((startElem, newEdge1))
-      val newEdge2    = edge.replaceStart(splitIdx)
-      newNode.edges += ((corpus(splitIdx), newEdge2))
+      val newEdge2    = edge.replaceStart(splitIdx)   // XXX TODO: splitIdx is wrong startIdx
+      newNode.edges += ((corpus(splitIdx), newEdge2)) // XXX TODO: splitIdx is wrong startIdx
       newNode
     }
 
