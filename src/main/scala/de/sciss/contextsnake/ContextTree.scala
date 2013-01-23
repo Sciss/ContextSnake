@@ -278,6 +278,7 @@ println("<<<<<<<< CANONIZE " + active + "\n")
     }
 
     private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: InnerNode) extends Edge {
+      override def toString = "InnerEdge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
       def span = stopIdx - startIdx
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
@@ -357,8 +358,8 @@ println("<<<<<<<< CANONIZE " + active + "\n")
       val newNode     = new InnerNode(active.source)
       val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
       active.source.edges += ((startElem, newEdge1))
-      val newEdge2    = edge.replaceStart(splitIdx)   // XXX TODO: splitIdx is wrong startIdx
-      newNode.edges += ((corpus(splitIdx), newEdge2)) // XXX TODO: splitIdx is wrong startIdx
+      val newEdge2    = edge.replaceStart(splitIdx)
+      newNode.edges += ((corpus(splitIdx), newEdge2))
 println("SPLIT " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }

@@ -193,8 +193,9 @@ vs
 SPLIT LeafEdge(3) -> new1 = InnerEdge(3,7,3); new2 = LeafEdge(7)
 DROP TO TAIL
 
+// OK
 >>>>>>>> CANONIZE active(start=5, stop=9, seq=<1,0,1,0>, source=0)
-         edges(1) = InnerEdge(0,2,2)
+         edges('1') = InnerEdge(0,2,2)
          now start = 7, source = 2
          edges(1) = LeafEdge(5)
 <<<<<<<< CANONIZE active(start=7, stop=9, seq=<1,0>, source=2)
@@ -202,7 +203,7 @@ DROP TO TAIL
 SPLIT LeafEdge(5) -> new1 = InnerEdge(5,7,4); new2 = LeafEdge(7)
 DROP TO TAIL
 
-!!!
+!!! ORIGIN IS WRONG
 >>>>>>>> CANONIZE active(start=7, stop=9, seq=<1,0>, source=0)
          // this returned edge seems to be obsolete!!!
          edges('1') = InnerEdge(0,2,2) --> edge.span = 2, active.span = 2
@@ -217,8 +218,14 @@ DROP TO TAIL
 
 ::::: versus
 
+<<<<<<<< CANONIZE active(first_char=5, last_char=8, origin=0) "1010")
+         edges('1') = <start_node=0, end_node=5, first_char=0, last_char=1 "10" : span = 1
+         now start = 7, source = 5
+         edge = <start_node=5, end_node=6, first_char=5, last_char=10 "10100x" : span = 5
+>>>>>>>> CANONIZE active(first_char=7, last_char=8, origin=5) "1010")
+
+
 !!!
-New prefix : (3,(7,8) "484948")
-<<<<<<<< CANONIZE
-         edges('1') = <start_node=3, end_node=7, first_char=3, last_char=6 "1010" : span = 3
->>>>>>>> CANONIZE
+<<<<<<<< CANONIZE active(first_char=7, last_char=8, origin=3) "010")
+         edges(49) = <start_node=3, end_node=7, first_char=3, last_char=6 "1010" : span = 3
+>>>>>>>> CANONIZE active(first_char=7, last_char=8, origin=3) "010")
