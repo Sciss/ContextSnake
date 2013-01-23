@@ -79,7 +79,7 @@ object ContextTree {
 
   private final class Impl[A] extends ContextTree[A] {
     private val corpus  = mutable.Buffer.empty[A]
-    private val active  = new Cursor(RootNode, 0, 0)
+//    private val active  = new Cursor // (RootNode, 0, 0)
 //    private var activeNode: RootOrNode = RootNode
 //    private var activeStartIdx    = 0
 //    private var activeStopIdx     = 0
@@ -91,9 +91,18 @@ object ContextTree {
       res
     }
 
-    private final class Cursor(var node: RootOrNode, var startIdx: Int, var stopIdx: Int) {
-      def isExplicit  = startIdx >= stopIdx
-      def span        = stopIdx - startIdx
+    private sealed trait Position {
+      final var startIdx: Int = 0
+      final var stopIdx: Int = 0
+
+      final def isExplicit  = startIdx >= stopIdx
+      final def span        = stopIdx - startIdx
+    }
+
+    private final class Cursor extends Position
+
+    private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
+      var node: RootOrNode = RootNode
 
       def dropToTail() {
         node match {
@@ -173,19 +182,39 @@ object ContextTree {
     def contains(elem: A): Boolean = RootNode.edges.contains(elem)
 
     def containsSlice(xs: TraversableOnce[A]): Boolean = {
+//      if(xs.isEmpty) return true
+//      val it = xs.toIterator
+//      RootNode.getEdge(it.next()) match {
+//        case None => false
+//        case Some(edge) =>
+//          val m       = new Cursor
+//          m.node      = RootNode
+//          m.startIdx  = edge.startIdx + 1
+//          m.stopIdx   = edge.stopIdx
+//          while(it.hasNext) {
+//            val e = it.next()
+//            if (m.startIdx < m.stopIdx) {
+//              if (corpus(m.startIdx) != e) return false // not found in implicit node
+//              m.startIdx += 1
+//            } else edge.targetNode match {
+//              case m.
+//            }
+//          }
+//          true
+//      }
+
+      val m = new Cursor
       var n: RootOrNodeOrLeaf = RootNode
-      var start = 0
-      var stop  = 0
       xs.foreach { e =>
-        if (start < stop) {
-          if (corpus(start) != e) return false  // not found in implicit node
-          start += 1
+        if (m.startIdx < m.stopIdx) {
+          if (corpus(m.startIdx) != e) return false // not found in implicit node
+          m.startIdx += 1
         } else n.getEdge(e) match {
-          case None       => return false       // reached end of leaf node
+          case None       => return false           // reached end of leaf node
           case Some(edge) =>
-            n     = edge.targetNode
-            start = edge.startIdx + 1
-            stop  = edge.stopIdx
+            n           = edge.targetNode
+            m.startIdx  = edge.startIdx + 1
+            m.stopIdx   = edge.stopIdx
         }
       }
       true
