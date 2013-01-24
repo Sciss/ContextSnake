@@ -3,11 +3,11 @@ package de.sciss.contextsnake
 import org.scalatest.FunSuite
 
 class ContextTreeSuite extends FunSuite {
-  val BROKEN  = true
+  val BROKEN  = false
 
   val seed    = 5L
-  val N       = 12 // 10000           // corpus size. higher than 10k gets slow because of the `.tails` iterations
-  val Ms      = Seq(2) // Seq(2, 26, N)   // maximum number of different symbols
+  val N       = 10000           // corpus size. higher than 10k gets slow because of the `.tails` iterations
+  val Ms      = Seq(2, 26, N)   // maximum number of different symbols
 
   test("sub-sequences searches are performed on the suffix tree") {
     Ms.foreach(test1)
@@ -27,6 +27,9 @@ class ContextTreeSuite extends FunSuite {
       c.append(v.last)
       println("\nGRAPH with N=" + N)
       println(c.toDOT(tailEdges = true, sep=","))
+
+//      c.containsSlice(Vector(1, 0, 0, 1, 1))
+
       v.tails.foreach { sq =>
         if (!c.containsSlice(sq)) {
           println("DOES NOT FIND: " + sq)

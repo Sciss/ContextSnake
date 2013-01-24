@@ -147,7 +147,6 @@ object ContextTree {
       def isExplicit: Boolean
       def span: Int
 
-
       final def dropToTail() {
         source match {
           case Node(tail) =>
@@ -160,6 +159,8 @@ object ContextTree {
         canonize()
       }
 
+      protected def reachedLeaf(): Unit
+
       final def canonize() {
         DEBUG_LOG(">>>> CANONIZE " + this)
         while (!isExplicit) {
@@ -170,8 +171,15 @@ object ContextTree {
             DEBUG_LOG("<<<< CANONIZE " + this + "\n")
             return
           }
-          startIdx      += edgeSpan
-          source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+          edge.targetNode match {
+            case n: Node  =>
+              source     = n
+              startIdx  += edgeSpan
+            case Leaf =>
+              reachedLeaf()
+              DEBUG_LOG("<<<< CANONIZE (LEAF) " + this)
+              return
+          }
           DEBUG_LOG("     now " + this)
         }
         DEBUG_LOG("<<<< CANONIZE " + this)
@@ -194,12 +202,14 @@ object ContextTree {
 //      private var edge: EdgeLike = DummyEdge
 //      private var idx: Int = 0
       var stopIdx: Int = 0
+//      private var edgeStopIdx: Int = 0
+      private var exhausted = false
 
       def isExplicit  = startIdx >= stopIdx
 //      def span        = idx - startIdx
       def span        = stopIdx - startIdx
 
-//      @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
+//      @inline private def edgeExhausted = stopIdx == edgeStopIdx
 //      private def edgeExhausted: Boolean = {
 //        stopIdx == 0 || stopIdx >= source.edges(corpus(startIdx)).stopIdx
 //      }
@@ -218,37 +228,41 @@ object ContextTree {
 //          startIdx      = edge.startIdx
 ////          stopIdx       = edge.stopIdx
 ////          idx           = edge.startIdx + 1
-//          stopIdx       = edge.startIdx + 1
-          startIdx      = edge.startIdx + 1
-          stopIdx       = edge.stopIdx
+          stopIdx       = edge.startIdx // will be incremented by tryMove!
+          startIdx      = edge.startIdx // + 1
+//          edgeStopIdx   = edge.stopIdx
         }
         found
       }
 
-      private def sourceAfterExplicit: RootOrNodeOrLeaf = {
-        if (stopIdx == 0) {
-          RootNode
-        } else {
-          val edge = source.edges(corpus(startIdx))
-          edge.targetNode
-        }
+      protected def reachedLeaf() {
+        exhausted = true
       }
 
-//      @inline private def implicitNext = corpus(stopIdx)
-      @inline private def implicitNext = corpus(startIdx)
+//      private def sourceAfterExhausted : RootOrNodeOrLeaf = {
+//        if (stopIdx == 0) {
+//          RootNode
+//        } else {
+//          val edge = source.edges(corpus(startIdx))
+//          edge.targetNode
+//        }
+//      }
+
+      @inline private def implicitNext = corpus(stopIdx)
+//      @inline private def implicitNext = corpus(startIdx)
 
       def tryMove(elem: A): Boolean = {
-        if (isExplicit) {
-          sourceAfterExplicit match {
-            case n: RootOrNode  => initFromNode(n, elem)
-            case Leaf           => false
-          }
+        val found = if (isExplicit) {
+          initFromNode(source, elem)
         } else {
-          val found = implicitNext == elem
-//          if (found) stopIdx += 1
-          if (found) startIdx += 1
-          found
+          !exhausted && implicitNext == elem
         }
+
+        if (found) {
+          stopIdx += 1
+          canonize()
+        }
+        found
       }
 
 //      def tryMove_(elem: A): Boolean = {
@@ -321,10 +335,13 @@ object ContextTree {
 
       def successors: Iterator[A] = {
         if (isExplicit) {
-          sourceAfterExplicit match {
-            case n: RootOrNode  => n.edges.keysIterator
-            case Leaf           => Iterator.empty
-          }
+          source.edges.keysIterator
+//          sourceAfterExhausted match {
+//            case n: RootOrNode  => n.edges.keysIterator
+//            case Leaf           => Iterator.empty
+//          }
+        } else if (exhausted) {
+          Iterator.empty
         } else {
           Iterator.single(implicitNext)
         }
@@ -411,6 +428,10 @@ object ContextTree {
       def span        = stopIdx - startIdx
 
       def prefix = "active"
+
+      protected def reachedLeaf() {
+        assert(assertion = false)
+      }
     }
 
     private sealed trait RootOrNodeOrLeaf
