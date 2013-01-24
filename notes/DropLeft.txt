@@ -1,0 +1,139 @@
+:::::::::::::
+
+val v = Vector(0, 1, 1, 2, 2, 2, 2, 0, 0, 2, 2, 2, 2, 1, 2, 2)
+
+0112222002222122
+e.start = 1
+source = n#5
+idx = 16; thus span = 15
+
+dropToTail:
+- source is root? NO
+- t = source.tail = root
+- t.edges(corpus(old-edge.start)) ???
+
+ABAB[A]B
+-> BAB[A]B
+move from n#1 to n#2 and look up the edge with the same
+beginning letter 'A' -> (from n#2, "ABC", to leaf)
+keep the offset into the edge label
+
+-> AB[A]B
+move from n#2 to n#3 and look up the edge with the same
+beginning letter 'A' -> (from n#3, "AB", to n#1)
+
+-> B[A]B
+move from n#3 to n#4 and look up the ege with the same
+beginning letter 'A' -> (from n#4, "AB", to n#2)
+
+-> [A]B
+move from n#4 to root and look up the ege with the same
+begining letter 'A' -> (from root, "AB", to n#3)
+
+-> B
+we are in root. look up edge with 'B' (from root, "B", to n#4)
+
+:::::::::::::::::
+val r = new util.Random(0L)
+val v = Vector.fill(16)((r.nextInt(5)+65).toChar).mkString
+// ADECADBBEECCDCAE
+
+e.g. ADECADBBE
+
+source  = n#1
+e.start = 2
+startIdx = 2  // aka 'idx'
+stopIdx = 9; thus span = 7
+
+AD[E]CADBBE
+-> D[E]CADBBE
+move from n#1 to n#2 and look up edge for 'E'
+(from n#2, "ECADBBE...", to leaf)
+
+-> [E]CADBBE
+move from n#2 to root and look up edge for 'E'
+= edge1 @ (from root, "E", to n#4)
+---canonize---
+edge1.span <= 7
+idx += edge1.span --> idx is now 10 ??
+(i think idx was 2 -- then it will be 3?)
+// that makes sense, it will point to [C]
+- replace source with target
+- is not explicit
+- neue edge by looking up [C]: edge2 @ (from n#4, "C", to n#5)
+edge2.span <= 6
+idx += edge2.span --> idx is now 4
+- replace with target
+- is not explicit
+- neue edge by looking up [A]: edge3 @ (from n#5, "ADBBE...", to leaf)
+edge3.span > 5
+--end canonize-- -> EC[A]DBBE
+
+-> C[A]DBBE
+move from n#5 to n#6 and look up edge for 'A'
+= edge4 @ (from n#6, "A", to n#7)
+---canonize---
+edge4.span <= 5
+idx += edge4.span --> idx is now 5
+- replace source with target
+- is not explicit
+- neue edge by looking up [D]: edge5 @ (from n#7, "DBBE...", to leaf)
+edge5.span > 4
+--end canonize--- -> CA[D]BBE
+
+-> A[D]BBE
+move from n#7 to n#8 and look up edge for 'D'
+= edge6 @ (from n#8, "D", to n#1)
+---canonize---
+edge6.span <= 4
+idx += edge.span --> idx is now 6
+- replace source with target
+- is not explicit
+- neue edge by looking up [B]: edge7 @ (from n#1, "BBE...", to leaf)
+edge7.span > 3
+--end canonize-- -> AD[B]BE
+
+-> D[B]BE
+move from n#1 to n#2 and look up edge for 'B'
+= edge8 @ (from n#2, "BBE...", to leaf)
+edge8.span > 3
+
+-> [B]BE
+move form n#2 to root and look up edge for 'B'
+= edge9 @ (from root, "B", to n#3)
+--canonize--
+edge9.span <= 3
+idx += edge9.span --> idx is now 7
+- replace...
+- is not explicit
+- neue edge by look up [B]: edge10 @ (from n#3, "BE...", to leaf)
+edge10.span > 2
+--end canonize-- -> B[B]E
+
+-> [B]E
+move from n#3 to root and look up edge for 'B'
+= edge11 @ (from root, "B", to leaf)
+--canonize--
+edge11.span <= 2
+idx += edge11.span --> idx is now 8
+- replace
+- is not explicit
+- neue edge by look up [E]: edge12 @ (from n#3, "E...", to leaf)
+edge12.span > 1
+--end canonize-- -> B[E]
+
+-> [E]
+move from n#3 to root and look up edge for 'E'
+= edge13 @ (from root, "E", to n#4)
+--canonize--
+edge13.span <= 1
+idx += edge13.span --> idx is now 9
+- replace
+- IS explicit
+--end canonize-- -> E[]
+
+tryMove
+- edge is exhausted (according to revised def.: startIdx == stopIdx)
+- edge.targetNode (???) is not a leaf; 
+- look up edge e.g. 'C' in n#4
+...

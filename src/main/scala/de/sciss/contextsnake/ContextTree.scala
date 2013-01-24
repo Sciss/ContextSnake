@@ -143,7 +143,7 @@ object ContextTree {
       private var edge: EdgeLike = DummyEdge
       private var idx: Int = 0
 
-      @inline private def edgeExhausted = idx == edge.stopIdx
+      @inline private def edgeExhausted = idx == edge.stopIdx // TODO muss dann sein: startIdx (aka idx) == stopIdx
 
       def tryMove(elem: A): Boolean = {
         if (edgeExhausted) edge.targetNode match {
@@ -164,21 +164,21 @@ object ContextTree {
         }
       }
 
-      def tryDropToTail(): Boolean = {
-        idx -= 1
-        if (idx > edge.startIdx) {
-          true
-        } else {
-          source match {
-            case Node(tail) =>
-              source  = tail
-              edge    = source.edges(corpus(idx))
-              idx     = edge.stopIdx // - 1
-              true
-            case RootNode => false
-          }
-        }
-      }
+//      def tryDropToTail(): Boolean = {
+//        idx -= 1
+//        if (idx > edge.startIdx) {
+//          true
+//        } else {
+//          source match {
+//            case Node(tail) =>
+//              source  = tail
+//              edge    = source.edges(corpus(idx))
+//              idx     = edge.stopIdx // - 1
+//              true
+//            case RootNode => false
+//          }
+//        }
+//      }
 
       def successors: Iterator[A] = {
         if (edgeExhausted) {
@@ -219,7 +219,8 @@ object ContextTree {
 //            body.trimStart(n)
 //          }
 //          c.dropToTail()
-          assert (c.tryDropToTail())
+//          assert (c.tryDropToTail())
+          ???
           m += 1
         }
         body.trimStart(n)
