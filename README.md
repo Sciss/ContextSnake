@@ -29,8 +29,7 @@ Begin of snake design (start in `sbt test:console`):
 
     :load notes/erlkoenig.txt
     val c = ContextTree(txt.toUpperCase: _*)
-    val s = c.snake("A")
-    // ... TODO
+    Util.produce(c,200,4)("M").mkString
 
 ```
 

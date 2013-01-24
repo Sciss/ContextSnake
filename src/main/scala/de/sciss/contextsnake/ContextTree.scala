@@ -42,6 +42,8 @@ object ContextTree {
   trait Like[A] {
     def size: Int
     def length: Int
+    def isEmpty: Boolean
+    def nonEmpty: Boolean
     def +=(elem: A): this.type
     def append(elems: A*): Unit
     def appendAll(xs: TraversableOnce[A]): Unit
@@ -284,7 +286,7 @@ object ContextTree {
 //        }
 //      }
 
-      def tryTrimStart(): Boolean = {
+      def trimStart(): Boolean = {
 //        val oldEdgeStart = startIdx
         dropToTail()
 //        val delta = startIdx - oldEdgeStart
@@ -378,10 +380,12 @@ object ContextTree {
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
       override def toString = "ContextTree.Snake(len=" + length +
-        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString + "; csr=" + c
+        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString // + "; csr=" + c
 
       def size: Int = body.length
       def length: Int = body.length
+      def isEmpty: Boolean = body.isEmpty
+      def nonEmpty: Boolean = body.nonEmpty
 
       def successors: Iterator[A] = c.successors
 
@@ -397,11 +401,7 @@ object ContextTree {
         if (n > sz) throw new IndexOutOfBoundsException((n - sz).toString)
         var m   = 0
         while (m < n) {
-//          if (!c.tryTrimStart()) {
-//            body.trimStart(n)
-//          }
-//          c.dropToTail()
-          assert (c.tryTrimStart())
+          c.trimStart()
           m += 1
         }
         body.trimStart(n)
