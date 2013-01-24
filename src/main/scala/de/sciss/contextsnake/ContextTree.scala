@@ -135,28 +135,111 @@ object ContextTree {
       res
     }
 
-//    private sealed trait Position {
-//    }
+    private sealed trait Position {
+      final var source: RootOrNode = RootNode
+      final var startIdx: Int = 0
+      final var stopIdx: Int = 0
 
-    private final class Cursor /* extends Position */ {
-      private var source: RootOrNode = RootNode
-      private var edge: EdgeLike = DummyEdge
+      def isExplicit  = startIdx >= stopIdx
+      def span        = stopIdx - startIdx
+
+      final def dropToTail() {
+        source match {
+          case Node(tail) =>
+            DEBUG_LOG("DROP: Suffix link from " + source + " to " + tail)
+            source = tail
+          case RootNode =>
+            DEBUG_LOG("DROP: At root")
+            startIdx += 1
+        }
+        canonize()
+      }
+
+      final def canonize() {
+        DEBUG_LOG(">>>> CANONIZE " + this)
+        while (!isExplicit) {
+          val edge       = source.edges(corpus(startIdx))
+          val edgeSpan   = edge.span
+          DEBUG_LOG("     edges(" + corpus(startIdx) + ") = " + edge)
+          if (edgeSpan > span) {
+            DEBUG_LOG("<<<< CANONIZE " + this + "\n")
+            return
+          }
+          startIdx      += edgeSpan
+          source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
+          DEBUG_LOG("     now " + this)
+        }
+        DEBUG_LOG("<<<< CANONIZE " + this)
+      }
+
+      protected def prefix: String
+
+      override def toString = prefix + "(start=" + startIdx + ", stop=" + stopIdx + {
+          val num = span
+          if (num > 0) {
+            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
+              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
+          } else {
+            ""
+          }
+        } + ", source=" + source + ")"
+    }
+
+    private final class Cursor extends Position {
+//      private var edge: EdgeLike = DummyEdge
       private var idx: Int = 0
 
-      @inline private def edgeExhausted = idx == edge.stopIdx // TODO muss dann sein: startIdx (aka idx) == stopIdx
+      @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
+
+      protected def prefix = "Cursor@" + hashCode().toHexString
+
+//      def init(start: A): Boolean = initFromNode(RootNode, start)
+
+      private def initFromNode(n: RootOrNode, elem: A): Boolean = {
+        val edgeOption  = n.edges.get(elem)
+        val found       = edgeOption.isDefined
+        if (found) {
+          val edge      = edgeOption.get
+          source        = n
+          startIdx      = edge.startIdx
+          stopIdx       = edge.stopIdx
+          idx           = edge.startIdx + 1
+        }
+        found
+      }
 
       def tryMove(elem: A): Boolean = {
-        if (edgeExhausted) edge.targetNode match {
-          case n: RootOrNode =>
-            val edgeOption  = n.edges.get(elem)
-            val found       = edgeOption.isDefined
-            if (found) {
-              edge          = edgeOption.get
-              source        = n
-              idx           = edge.startIdx + 1
-            }
-            found
-          case Leaf => false
+        if (edgeExhausted) {
+          val prev = if (stopIdx == 0) RootNode else {
+            val prevEdge = source.edges(corpus(startIdx))
+            prevEdge.targetNode
+          }
+          prev match {
+            case n: RootOrNode => initFromNode(n, elem)
+            case Leaf => false
+          }
+        } else {  // implicit position
+          val found = corpus(idx) == elem
+          if (found) idx += 1
+          found
+        }
+      }
+
+      def tryMove_(elem: A): Boolean = {
+        if (isExplicit) {
+          val edge = source.edges(corpus(startIdx))
+          edge.targetNode match {
+            case n: RootOrNode =>
+              val edgeOption  = n.edges.get(elem)
+              val found       = edgeOption.isDefined
+              if (found) {
+//                edge          = edgeOption.get
+                source        = n
+                idx           = edge.startIdx + 1
+              }
+              found
+            case Leaf => false
+          }
         } else {
           val found = corpus(idx) == elem
           if (found) idx += 1
@@ -181,7 +264,8 @@ object ContextTree {
 //      }
 
       def successors: Iterator[A] = {
-        if (edgeExhausted) {
+        if (isExplicit) {
+          val edge = source.edges(corpus(startIdx))
           edge.targetNode match {
             case n: RootOrNode =>
               n.edges.keysIterator
@@ -192,6 +276,19 @@ object ContextTree {
           Iterator.single(corpus(idx))
         }
       }
+
+//      def successors_ : Iterator[A] = {
+//        if (isExplicit) {
+//          edge.targetNode match {
+//            case n: RootOrNode =>
+//              n.edges.keysIterator
+//            case Leaf =>
+//              Iterator.empty
+//          }
+//        } else {
+//          Iterator.single(corpus(idx))
+//        }
+//      }
     }
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
@@ -240,52 +337,8 @@ object ContextTree {
       }
     }
 
-    private object active /* extends Position */ /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
-      var source: RootOrNode = RootNode
-      var startIdx: Int = 0
-      var stopIdx: Int = 0
-
-      def isExplicit  = startIdx >= stopIdx
-      def span        = stopIdx - startIdx
-
-      def dropToTail() {
-        source match {
-          case Node(tail) =>
-            DEBUG_LOG("DROP: Suffix link from " + source + " to " + tail)
-            source = tail
-          case RootNode =>
-            DEBUG_LOG("DROP: At root")
-            startIdx += 1
-        }
-        canonize()
-      }
-
-      def canonize() {
-        DEBUG_LOG(">>>> CANONIZE " + active)
-        while (!isExplicit) {
-          val edge       = source.edges(corpus(startIdx))
-          val edgeSpan   = edge.span
-          DEBUG_LOG("     edges(" + corpus(startIdx) + ") = " + edge)
-          if (edgeSpan > span) {
-            DEBUG_LOG("<<<< CANONIZE " + active + "\n")
-            return
-          }
-          startIdx      += edgeSpan
-          source         = edge.targetNode.asInstanceOf[Node]    // TODO shouldn't need a cast -- how to proof this cannot be Leaf?
-          DEBUG_LOG("     now " + active)
-        }
-        DEBUG_LOG("<<<< CANONIZE " + active)
-      }
-
-      override def toString = "active(start=" + startIdx + ", stop=" + stopIdx + {
-          val num = span
-          if (num > 0) {
-            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
-              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
-          } else {
-            ""
-          }
-        } + ", source=" + source + ")"
+    private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
+      def prefix = "active"
     }
 
     private sealed trait RootOrNodeOrLeaf
@@ -480,7 +533,6 @@ object ContextTree {
       val last = loop(RootNode)
       addLink(last, active.source)
       active.stopIdx += 1
-      active.canonize()
     }
   }
 }

@@ -1,0 +1,100 @@
+TryMove
+
+corpus = ADECADBBEECCDCAE
+
+given we have a snake body of 'A'
+
+let's say for the sake of getting started, that startIdx == stopIdx = 0 ???
+
+isExplicit? YES
+
+root.edge(corpus(0)=='A')== (from root, "A", to n#8; startIdx = 0)	// maybe just `contains`?
+
+; source will be n#8 now    // NEIN
+; stop will be +1
+
+--canonize--
+isExplicit? NO
+
+edge = (from root, "A", to n#8; span = 1)
+span = stopIdx - startIdx = 1
+edgeSpan <= span
+--> startIdx += edgeSpan --> startIdx now 1
+source = n#8
+
+:::::
+ADD 'D' --> "AD"
+
+isExplicit? YES
+
+n#8.edge(corpus('D'))== (from n#8, "D", to n#1; startIdx = 1)	// maybe just `contains`?
+
+; source will be n#1 now    // NEIN
+; stop will be +1, also 2 (span is 2)
+
+--canonize--
+isExplicit? NO
+
+n#8.edge(corpus(1)=='D')== (from n#8, "D", to n#1, startIdx = 1, stopIdx = 2)
+edgeSpan > span ; DONE
+
+:::::
+ADD 'B' --> "ADB"
+
+isExhausted? i.e. stopIdx == n#8.edge(corpus(startIdx==1)).stopIdx? YES
+--> n = n#8.edge(corpus(startIdx==1)).targetNode = n#1
+--> isLeaf? NO
+--> e = n.edges('B') --> (from n#1, "BBEE...", to leaf)
+--> startIdx := e.startIdx = 6!
+--> stopIdx  := e.startIdx as well??
+
+--canonize--
+isExplicit? YES
+
+::::::::::::::::
+::::: I think it's important to realise that we _do not_ keep track of the snake's head
+::::: ; that is to say, startIdx only reflects the current edges start idx
+::::: ; correct???
+::::::::::::::::
+
+:::::
+ADD 'X' --> "ADBX"
+
+stopIdx == n#1.edge(corpus(startIdx==6)=='B').stopIdx ? NO
+--> stopIdx += 1 (speculative) --> is now 7
+corpus(stopIdx)=='X'? NO! (it's 'B') --> FAILURE
+
+:::::
+ADD 'B'
+
+stopIdx(==6) == n#1.edge(corpus(startIdx==6)=='B').stopIdx ? NO
+--> stopIdx += 1 (speculative) --> is now 7
+corpus(stopIdx==7)=='B' YES
+
+:::::::::::::::::
+
+let's try 'CAEX'
+
+assume 'C' has been done, such that
+source = root; startIdx = 3; stopIdx = 4; idx = 4
+
+ADD 'A'
+
+isExhausted? YES
+source.edge(corpus(startIdx)).targetNode = n#6
+n#6.edges.contains('A') YES ; it's (from n#6, "A", to n#7, startIdx = 4, stopIdx = 5 ?)
+-->
+source = n#6; startIdx = 4 -> idx = 5; stopIdx = 5
+
+ADD' E'
+
+isExhausted? YES
+source.edge(corpus(startIdx)).targetNode = n#7
+n#7.edges.contains('E') YES ; it's (from n#7, "E", to leaf, startIdx = 15 ?)
+-->
+source = n#7; startIdx = 15 -> idx = 16; stopIdx = 16
+
+ADD 'X'
+
+isExhausted? YES
+source.edge(corpus(startIdx)).targetNode non-existent -> FAILURE
