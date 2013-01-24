@@ -200,9 +200,9 @@ object ContextTree {
       def span        = stopIdx - startIdx
 
 //      @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
-      private def edgeExhausted: Boolean = {
-        stopIdx == 0 || stopIdx >= source.edges(corpus(startIdx)).stopIdx
-      }
+//      private def edgeExhausted: Boolean = {
+//        stopIdx == 0 || stopIdx >= source.edges(corpus(startIdx)).stopIdx
+//      }
 
 //      protected def prefix = "Cursor[" + idx + "]@" + hashCode().toHexString
       protected def prefix = "Cursor@" + hashCode().toHexString
@@ -215,10 +215,12 @@ object ContextTree {
         if (found) {
           val edge      = edgeOption.get
           source        = n
-          startIdx      = edge.startIdx
-//          stopIdx       = edge.stopIdx
-//          idx           = edge.startIdx + 1
-          stopIdx       = edge.startIdx + 1
+//          startIdx      = edge.startIdx
+////          stopIdx       = edge.stopIdx
+////          idx           = edge.startIdx + 1
+//          stopIdx       = edge.startIdx + 1
+          startIdx      = edge.startIdx + 1
+          stopIdx       = edge.stopIdx
         }
         found
       }
@@ -232,7 +234,8 @@ object ContextTree {
         }
       }
 
-      @inline private def implicitNext = corpus(stopIdx)
+//      @inline private def implicitNext = corpus(stopIdx)
+      @inline private def implicitNext = corpus(startIdx)
 
       def tryMove(elem: A): Boolean = {
         if (isExplicit) {
@@ -242,29 +245,30 @@ object ContextTree {
           }
         } else {
           val found = implicitNext == elem
-          if (found) stopIdx += 1
+//          if (found) stopIdx += 1
+          if (found) startIdx += 1
           found
         }
       }
 
-      def tryMove_(elem: A): Boolean = {
-        if (edgeExhausted) {
-          val prev = if (stopIdx == 0) RootNode else {
-            val prevEdge = source.edges(corpus(startIdx))
-            prevEdge.targetNode
-          }
-          prev match {
-            case n: RootOrNode => initFromNode(n, elem)
-            case Leaf => false
-          }
-        } else {  // implicit position
-//        val found = corpus(idx) == elem
-          val found = corpus(stopIdx) == elem
-//          if (found) idx += 1
-          if (found) stopIdx += 1
-          found
-        }
-      }
+//      def tryMove_(elem: A): Boolean = {
+//        if (edgeExhausted) {
+//          val prev = if (stopIdx == 0) RootNode else {
+//            val prevEdge = source.edges(corpus(startIdx))
+//            prevEdge.targetNode
+//          }
+//          prev match {
+//            case n: RootOrNode => initFromNode(n, elem)
+//            case Leaf => false
+//          }
+//        } else {  // implicit position
+////        val found = corpus(idx) == elem
+//          val found = corpus(stopIdx) == elem
+////          if (found) idx += 1
+//          if (found) stopIdx += 1
+//          found
+//        }
+//      }
 
       def tryTrimStart(): Boolean = {
 //        val oldEdgeStart = startIdx
@@ -326,20 +330,20 @@ object ContextTree {
         }
       }
 
-      def successors_ : Iterator[A] = {
-        if (isExplicit) {
-          val edge = source.edges(corpus(startIdx))
-          edge.targetNode match {
-            case n: RootOrNode =>
-              n.edges.keysIterator
-            case Leaf =>
-              Iterator.empty
-          }
-        } else {
-//          Iterator.single(corpus(idx))
-          Iterator.single(corpus(stopIdx))
-        }
-      }
+//      def successors_ : Iterator[A] = {
+//        if (isExplicit) {
+//          val edge = source.edges(corpus(startIdx))
+//          edge.targetNode match {
+//            case n: RootOrNode =>
+//              n.edges.keysIterator
+//            case Leaf =>
+//              Iterator.empty
+//          }
+//        } else {
+////          Iterator.single(corpus(idx))
+//          Iterator.single(corpus(stopIdx))
+//        }
+//      }
 
 //      def successors_ : Iterator[A] = {
 //        if (isExplicit) {

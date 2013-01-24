@@ -6,7 +6,7 @@ class ContextTreeSuite extends FunSuite {
   val BROKEN  = true
 
   val seed    = 5L
-  val N       = 4 // 10000           // corpus size. higher than 10k gets slow because of the `.tails` iterations
+  val N       = 12 // 10000           // corpus size. higher than 10k gets slow because of the `.tails` iterations
   val Ms      = Seq(2) // Seq(2, 26, N)   // maximum number of different symbols
 
   test("sub-sequences searches are performed on the suffix tree") {
