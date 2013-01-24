@@ -533,6 +533,7 @@ object ContextTree {
       val last = loop(RootNode)
       addLink(last, active.source)
       active.stopIdx += 1
+      active.canonize()
     }
   }
 }
