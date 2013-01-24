@@ -121,7 +121,7 @@ object ContextTree {
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
-  @elidable(INFO) private final val DEBUG = false
+  @elidable(INFO) private final val DEBUG = true // false
   @elidable(INFO) private def DEBUG_LOG(message: => String) {
     if (DEBUG) println(message)
   }
@@ -138,10 +138,15 @@ object ContextTree {
     private sealed trait Position {
       final var source: RootOrNode = RootNode
       final var startIdx: Int = 0
-      final var stopIdx: Int = 0
+      def stopIdx: Int
+//      final var stopIdx: Int = 0
 
-      def isExplicit  = startIdx >= stopIdx
-      def span        = stopIdx - startIdx
+//      def isExplicit  = startIdx >= stopIdx
+//      def span        = stopIdx - startIdx
+
+      def isExplicit: Boolean
+      def span: Int
+
 
       final def dropToTail() {
         source match {
@@ -188,10 +193,14 @@ object ContextTree {
     private final class Cursor extends Position {
 //      private var edge: EdgeLike = DummyEdge
       private var idx: Int = 0
+      var stopIdx: Int = 0
+
+      def isExplicit  = startIdx >= stopIdx
+      def span        = idx - startIdx
 
       @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
 
-      protected def prefix = "Cursor@" + hashCode().toHexString
+      protected def prefix = "Cursor[" + idx + "]@" + hashCode().toHexString
 
 //      def init(start: A): Boolean = initFromNode(RootNode, start)
 
@@ -225,27 +234,37 @@ object ContextTree {
         }
       }
 
-      def tryMove_(elem: A): Boolean = {
-        if (isExplicit) {
-          val edge = source.edges(corpus(startIdx))
-          edge.targetNode match {
-            case n: RootOrNode =>
-              val edgeOption  = n.edges.get(elem)
-              val found       = edgeOption.isDefined
-              if (found) {
-//                edge          = edgeOption.get
-                source        = n
-                idx           = edge.startIdx + 1
-              }
-              found
-            case Leaf => false
-          }
-        } else {
-          val found = corpus(idx) == elem
-          if (found) idx += 1
-          found
-        }
+      def tryTrimStart(): Boolean = {
+        val oldEdgeStart = startIdx
+        dropToTail()
+        val delta = startIdx - oldEdgeStart
+val oldIdx = idx
+        idx += delta // ???
+println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startIdx + "; idx was " + oldIdx + "; new is " + idx )
+        true
       }
+
+//      def tryMove_(elem: A): Boolean = {
+//        if (isExplicit) {
+//          val edge = source.edges(corpus(startIdx))
+//          edge.targetNode match {
+//            case n: RootOrNode =>
+//              val edgeOption  = n.edges.get(elem)
+//              val found       = edgeOption.isDefined
+//              if (found) {
+////                edge          = edgeOption.get
+//                source        = n
+//                idx           = edge.startIdx + 1
+//              }
+//              found
+//            case Leaf => false
+//          }
+//        } else {
+//          val found = corpus(idx) == elem
+//          if (found) idx += 1
+//          found
+//        }
+//      }
 
 //      def tryDropToTail(): Boolean = {
 //        idx -= 1
@@ -293,7 +312,7 @@ object ContextTree {
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
       override def toString = "ContextTree.Snake(len=" + length +
-        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString
+        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString + "; csr=" + c
 
       def size: Int = body.length
       def length: Int = body.length
@@ -312,12 +331,11 @@ object ContextTree {
         if (n > sz) throw new IndexOutOfBoundsException((n - sz).toString)
         var m   = 0
         while (m < n) {
-//          if (!c.tryDropToTail()) {
+//          if (!c.tryTrimStart()) {
 //            body.trimStart(n)
 //          }
 //          c.dropToTail()
-//          assert (c.tryDropToTail())
-          ???
+          assert (c.tryTrimStart())
           m += 1
         }
         body.trimStart(n)
@@ -338,6 +356,11 @@ object ContextTree {
     }
 
     private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
+      var stopIdx: Int = 0
+
+      def isExplicit  = startIdx >= stopIdx
+      def span        = stopIdx - startIdx
+
       def prefix = "active"
     }
 
@@ -389,12 +412,12 @@ object ContextTree {
       def replaceStart(newStart: Int): Edge
     }
 
-    private case object DummyEdge extends EdgeLike {
-      def startIdx: Int = 0
-      def stopIdx: Int = 0
-      def span: Int = 0
-      def targetNode: RootOrNodeOrLeaf = RootNode
-    }
+//    private case object DummyEdge extends EdgeLike {
+//      def startIdx: Int = 0
+//      def stopIdx: Int = 0
+//      def span: Int = 0
+//      def targetNode: RootOrNodeOrLeaf = RootNode
+//    }
 
     private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
       override def toString = "InnerEdge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
