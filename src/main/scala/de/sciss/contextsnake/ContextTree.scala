@@ -121,7 +121,7 @@ object ContextTree {
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
-  @elidable(INFO) private final val DEBUG = true // false
+  @elidable(INFO) private final val DEBUG = false
   @elidable(INFO) private def DEBUG_LOG(message: => String) {
     if (DEBUG) println(message)
   }
@@ -192,15 +192,20 @@ object ContextTree {
 
     private final class Cursor extends Position {
 //      private var edge: EdgeLike = DummyEdge
-      private var idx: Int = 0
+//      private var idx: Int = 0
       var stopIdx: Int = 0
 
       def isExplicit  = startIdx >= stopIdx
-      def span        = idx - startIdx
+//      def span        = idx - startIdx
+      def span        = stopIdx - startIdx
 
-      @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
+//      @inline private def edgeExhausted = idx == stopIdx // NEIN: TODO muss dann sein: startIdx (aka idx) == stopIdx
+      private def edgeExhausted: Boolean = {
+        stopIdx == 0 || stopIdx >= source.edges(corpus(startIdx)).stopIdx
+      }
 
-      protected def prefix = "Cursor[" + idx + "]@" + hashCode().toHexString
+//      protected def prefix = "Cursor[" + idx + "]@" + hashCode().toHexString
+      protected def prefix = "Cursor@" + hashCode().toHexString
 
 //      def init(start: A): Boolean = initFromNode(RootNode, start)
 
@@ -211,13 +216,38 @@ object ContextTree {
           val edge      = edgeOption.get
           source        = n
           startIdx      = edge.startIdx
-          stopIdx       = edge.stopIdx
-          idx           = edge.startIdx + 1
+//          stopIdx       = edge.stopIdx
+//          idx           = edge.startIdx + 1
+          stopIdx       = edge.startIdx + 1
         }
         found
       }
 
+      private def sourceAfterExplicit: RootOrNodeOrLeaf = {
+        if (stopIdx == 0) {
+          RootNode
+        } else {
+          val edge = source.edges(corpus(startIdx))
+          edge.targetNode
+        }
+      }
+
+      @inline private def implicitNext = corpus(stopIdx)
+
       def tryMove(elem: A): Boolean = {
+        if (isExplicit) {
+          sourceAfterExplicit match {
+            case n: RootOrNode  => initFromNode(n, elem)
+            case Leaf           => false
+          }
+        } else {
+          val found = implicitNext == elem
+          if (found) stopIdx += 1
+          found
+        }
+      }
+
+      def tryMove_(elem: A): Boolean = {
         if (edgeExhausted) {
           val prev = if (stopIdx == 0) RootNode else {
             val prevEdge = source.edges(corpus(startIdx))
@@ -228,19 +258,22 @@ object ContextTree {
             case Leaf => false
           }
         } else {  // implicit position
-          val found = corpus(idx) == elem
-          if (found) idx += 1
+//        val found = corpus(idx) == elem
+          val found = corpus(stopIdx) == elem
+//          if (found) idx += 1
+          if (found) stopIdx += 1
           found
         }
       }
 
       def tryTrimStart(): Boolean = {
-        val oldEdgeStart = startIdx
+//        val oldEdgeStart = startIdx
         dropToTail()
-        val delta = startIdx - oldEdgeStart
-val oldIdx = idx
-        idx += delta // ???
-println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startIdx + "; idx was " + oldIdx + "; new is " + idx )
+//        val delta = startIdx - oldEdgeStart
+//val oldIdx = stopIdx // idx
+//        idx += delta // ???
+//        stopIdx += delta // ???
+//println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startIdx ) // + "; stop was " + oldIdx + "; new is " + stopIdx )
         true
       }
 
@@ -284,6 +317,17 @@ println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startId
 
       def successors: Iterator[A] = {
         if (isExplicit) {
+          sourceAfterExplicit match {
+            case n: RootOrNode  => n.edges.keysIterator
+            case Leaf           => Iterator.empty
+          }
+        } else {
+          Iterator.single(implicitNext)
+        }
+      }
+
+      def successors_ : Iterator[A] = {
+        if (isExplicit) {
           val edge = source.edges(corpus(startIdx))
           edge.targetNode match {
             case n: RootOrNode =>
@@ -292,7 +336,8 @@ println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startId
               Iterator.empty
           }
         } else {
-          Iterator.single(corpus(idx))
+//          Iterator.single(corpus(idx))
+          Iterator.single(corpus(stopIdx))
         }
       }
 
