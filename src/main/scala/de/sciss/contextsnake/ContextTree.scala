@@ -31,14 +31,33 @@ import elidable.INFO
 import collection.generic.CanBuildFrom
 
 object ContextTree {
+  /**
+   * Creates a new empty context tree for a given element type.
+   * Elements can then be added using `+=`, `append`, or `appendAll`.
+   *
+   * @tparam A  the element type
+   */
   def empty[A]: ContextTree[A] = new Impl[A]
 
+  /**
+   * Creates a context tree populated with the given elements.
+   *
+   * @param elem  the elements to add in their original order
+   * @tparam A    the element type
+   */
   def apply[A](elem: A*): ContextTree[A] = {
     val res = empty[A]
     res.appendAll(elem)
     res
   }
 
+  /**
+   * A common trait to the suffix tree and navigating snakes.
+   * Since they are backed by a `collection.mutable.Buffer`, most operations
+   * exposed here use the buffer terminology.
+   *
+   * @tparam A  the element type of the tree/snake
+   */
   trait Like[A] {
     def size: Int
     def length: Int
@@ -51,6 +70,9 @@ object ContextTree {
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
+  /**
+   * A `Snake` represents a sliding window over a context tree's corpus.
+   */
   trait Snake[A] extends Like[A] {
     /**
      * The size of the snake. Same as `length`
@@ -129,25 +151,21 @@ object ContextTree {
   }
 
   private final class Impl[A] extends ContextTree[A] {
-    private val corpus  = mutable.Buffer.empty[A]
-    /* @elidable(INFO) */ private var nodeCount = 1 // scalac crashes when elidable
-    @elidable(INFO) private def nextNodeID() = {
+    val corpus = mutable.Buffer.empty[A]
+    /* @elidable(INFO) */ private var nodeCount = 1 // note: scalac crashes when this is marked `elidable`
+    @elidable(INFO) def nextNodeID() = {
       val res = nodeCount
       nodeCount += 1
       res
     }
 
-    private sealed trait Position {
+    sealed trait Position {
       final var source: RootOrNode = RootNode
       final var startIdx: Int = 0
-      def stopIdx: Int
-//      final var stopIdx: Int = 0
+      final var stopIdx:  Int = 0
 
-//      def isExplicit  = startIdx >= stopIdx
-//      def span        = stopIdx - startIdx
-
-      def isExplicit: Boolean
-      def span: Int
+      final def isExplicit  = startIdx >= stopIdx
+      final def span        = stopIdx - startIdx
 
       final def dropToTail() {
         source match {
@@ -161,8 +179,17 @@ object ContextTree {
         canonize()
       }
 
-      protected def reachedLeaf(): Unit
+      // called when during canonisation we drop to a leaf node.
+      // this can mean an assertion error or a particular condition
+      // such as signalising that a cursor is exhausted
+      def reachedLeaf(): Unit
 
+      /*
+       * This method should be called whenever the position is moved. It will
+       * normalise the position. If the position denotes an implicit node
+       * and the offset shoots past that node's end, we drop to the edge's
+       * target node and repeat the check.
+       */
       final def canonize() {
         DEBUG_LOG(">>>> CANONIZE " + this)
         while (!isExplicit) {
@@ -187,7 +214,10 @@ object ContextTree {
         DEBUG_LOG("<<<< CANONIZE " + this)
       }
 
-      protected def prefix: String
+      /*
+       * The prefix is used to distinguish different instances of `Position` in `toString`
+       */
+      def prefix: String
 
       override def toString = prefix + "(start=" + startIdx + ", stop=" + stopIdx + {
           val num = span
@@ -200,26 +230,10 @@ object ContextTree {
         } + ", source=" + source + ")"
     }
 
-    private final class Cursor extends Position {
-//      private var edge: EdgeLike = DummyEdge
-//      private var idx: Int = 0
-      var stopIdx: Int = 0
-//      private var edgeStopIdx: Int = 0
-      private var exhausted = false
+    final class Cursor extends Position {
+      private var exhausted = false // when the cursor's last position has come to the very end of the corpus
 
-      def isExplicit  = startIdx >= stopIdx
-//      def span        = idx - startIdx
-      def span        = stopIdx - startIdx
-
-//      @inline private def edgeExhausted = stopIdx == edgeStopIdx
-//      private def edgeExhausted: Boolean = {
-//        stopIdx == 0 || stopIdx >= source.edges(corpus(startIdx)).stopIdx
-//      }
-
-//      protected def prefix = "Cursor[" + idx + "]@" + hashCode().toHexString
-      protected def prefix = "Cursor@" + hashCode().toHexString
-
-//      def init(start: A): Boolean = initFromNode(RootNode, start)
+      def prefix = "Cursor@" + hashCode().toHexString
 
       private def initFromNode(n: RootOrNode, elem: A): Boolean = {
         val edgeOption  = n.edges.get(elem)
@@ -227,32 +241,26 @@ object ContextTree {
         if (found) {
           val edge      = edgeOption.get
           source        = n
-//          startIdx      = edge.startIdx
-////          stopIdx       = edge.stopIdx
-////          idx           = edge.startIdx + 1
           stopIdx       = edge.startIdx // will be incremented by tryMove!
-          startIdx      = edge.startIdx // + 1
-//          edgeStopIdx   = edge.stopIdx
+          startIdx      = edge.startIdx
         }
         found
       }
 
-      protected def reachedLeaf() {
+      // sets the `exhausted` flag which is used in `tryMove` and `successors`
+      def reachedLeaf() {
         exhausted = true
       }
 
-//      private def sourceAfterExhausted : RootOrNodeOrLeaf = {
-//        if (stopIdx == 0) {
-//          RootNode
-//        } else {
-//          val edge = source.edges(corpus(startIdx))
-//          edge.targetNode
-//        }
-//      }
-
+      // the next element, assuming we are on an implicit node
       @inline private def implicitNext = corpus(stopIdx)
-//      @inline private def implicitNext = corpus(startIdx)
 
+      /**
+       * Tries to move the cursor one position forward by selecting the given element.
+       *
+       * @param elem  the element to follow to
+       * @return      `true` if the element was a possible successor, `false` if not (this aborts the move)
+       */
       def tryMove(elem: A): Boolean = {
         val found = if (isExplicit) {
           initFromNode(source, elem)
@@ -267,124 +275,41 @@ object ContextTree {
         found
       }
 
-//      def tryMove_(elem: A): Boolean = {
-//        if (edgeExhausted) {
-//          val prev = if (stopIdx == 0) RootNode else {
-//            val prevEdge = source.edges(corpus(startIdx))
-//            prevEdge.targetNode
-//          }
-//          prev match {
-//            case n: RootOrNode => initFromNode(n, elem)
-//            case Leaf => false
-//          }
-//        } else {  // implicit position
-////        val found = corpus(idx) == elem
-//          val found = corpus(stopIdx) == elem
-////          if (found) idx += 1
-//          if (found) stopIdx += 1
-//          found
-//        }
-//      }
+      /**
+       * Drops the first element in the suffix
+       */
+      def trimStart() { dropToTail() }
 
-      def trimStart(): Boolean = {
-//        val oldEdgeStart = startIdx
-        dropToTail()
-//        val delta = startIdx - oldEdgeStart
-//val oldIdx = stopIdx // idx
-//        idx += delta // ???
-//        stopIdx += delta // ???
-//println("TRIM START: old edge start was " + oldEdgeStart + "; new is " + startIdx ) // + "; stop was " + oldIdx + "; new is " + stopIdx )
-        true
-      }
+      /**
+       * Drops the last element in the suffix
+       */
+      def trimEnd() { ??? }
 
-//      def tryMove_(elem: A): Boolean = {
-//        if (isExplicit) {
-//          val edge = source.edges(corpus(startIdx))
-//          edge.targetNode match {
-//            case n: RootOrNode =>
-//              val edgeOption  = n.edges.get(elem)
-//              val found       = edgeOption.isDefined
-//              if (found) {
-////                edge          = edgeOption.get
-//                source        = n
-//                idx           = edge.startIdx + 1
-//              }
-//              found
-//            case Leaf => false
-//          }
-//        } else {
-//          val found = corpus(idx) == elem
-//          if (found) idx += 1
-//          found
-//        }
-//      }
-
-//      def tryDropToTail(): Boolean = {
-//        idx -= 1
-//        if (idx > edge.startIdx) {
-//          true
-//        } else {
-//          source match {
-//            case Node(tail) =>
-//              source  = tail
-//              edge    = source.edges(corpus(idx))
-//              idx     = edge.stopIdx // - 1
-//              true
-//            case RootNode => false
-//          }
-//        }
-//      }
-
+      /**
+       * Queries the possible successor elements of the current suffix
+       *
+       * @return  an iterator over the possible elements (any of which can be safely passed to `tryMove`).
+       *          This will be empty if the cursor is exhausted. It will be `1` if the cursor is currently on
+       *          and implicit node.
+       */
       def successors: Iterator[A] = {
         if (isExplicit) {
           source.edges.keysIterator
-//          sourceAfterExhausted match {
-//            case n: RootOrNode  => n.edges.keysIterator
-//            case Leaf           => Iterator.empty
-//          }
         } else if (exhausted) {
           Iterator.empty
         } else {
           Iterator.single(implicitNext)
         }
       }
-
-//      def successors_ : Iterator[A] = {
-//        if (isExplicit) {
-//          val edge = source.edges(corpus(startIdx))
-//          edge.targetNode match {
-//            case n: RootOrNode =>
-//              n.edges.keysIterator
-//            case Leaf =>
-//              Iterator.empty
-//          }
-//        } else {
-////          Iterator.single(corpus(idx))
-//          Iterator.single(corpus(stopIdx))
-//        }
-//      }
-
-//      def successors_ : Iterator[A] = {
-//        if (isExplicit) {
-//          edge.targetNode match {
-//            case n: RootOrNode =>
-//              n.edges.keysIterator
-//            case Leaf =>
-//              Iterator.empty
-//          }
-//        } else {
-//          Iterator.single(corpus(idx))
-//        }
-//      }
     }
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
       override def toString = "ContextTree.Snake(len=" + length +
         (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString // + "; csr=" + c
 
-      def size: Int = body.length
-      def length: Int = body.length
-      def isEmpty: Boolean = body.isEmpty
+      def size: Int         = body.length
+      def length: Int       = body.length
+      def isEmpty: Boolean  = body.isEmpty
       def nonEmpty: Boolean = body.nonEmpty
 
       def successors: Iterator[A] = c.successors
@@ -393,13 +318,18 @@ object ContextTree {
       def apply(idx: Int): A = body(idx)
 
       def trimEnd(n: Int) {
-        ???
+        if (n > size) throw new IndexOutOfBoundsException((n - size).toString)
+        var m = 0
+        while (m < n) {
+          c.trimEnd()
+          m += 1
+        }
+        body.trimEnd(n)
       }
 
       def trimStart(n: Int) {
-        val sz  = size
-        if (n > sz) throw new IndexOutOfBoundsException((n - sz).toString)
-        var m   = 0
+        if (n > size) throw new IndexOutOfBoundsException((n - size).toString)
+        var m = 0
         while (m < n) {
           c.trimStart()
           m += 1
@@ -422,80 +352,84 @@ object ContextTree {
     }
 
     private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
-      var stopIdx: Int = 0
-
-      def isExplicit  = startIdx >= stopIdx
-      def span        = stopIdx - startIdx
-
       def prefix = "active"
 
-      protected def reachedLeaf() {
+      // the active point should never reach a leaf
+      def reachedLeaf() {
         assert(assertion = false)
       }
     }
 
-    private sealed trait RootOrNodeOrLeaf
-//    {
-//      def getEdge(elem: A): Option[Edge]
-//    }
-    private sealed trait NodeOrLeaf extends RootOrNodeOrLeaf
-    private sealed trait RootOrNode extends RootOrNodeOrLeaf {
+    /*
+     * Any node in the tree, either the root, an inner node, or a leaf
+     */
+    sealed trait RootOrNodeOrLeaf
+    /*
+     * An inner node or a leaf, but not the root
+     */
+    sealed trait NodeOrLeaf extends RootOrNodeOrLeaf
+    /*
+     * The root or an inner node, but not a leaf
+     */
+    sealed trait RootOrNode extends RootOrNodeOrLeaf {
       // use immutable.Set because we'll have many leave nodes,
       // and immutable.Set.empty is cheap compared to mutable.Set
       // ; another advantage is that we can return a view to
       // consumers of the tree without making a defensive copy
       final var edges = Map.empty[A, Edge]
-//      final def getEdge(elem: A): Option[Edge] = edges.get(elem)
     }
 
-//    private sealed trait Node extends NodeOrLeaf with RootOrNode {
-//      @elidable(INFO) val id = nextNodeID()
-//      @elidable(INFO) override def toString = id.toString
-//    }
+    case object Leaf extends NodeOrLeaf
 
-    private case object Leaf extends NodeOrLeaf
-//    {
-//      def getEdge(elem: A): Option[Edge] = None
-//    }
-
-    private object Node {
+    object Node {
       def unapply(n: Node): Option[RootOrNode] = Some(n.tail)
     }
-    private final class Node(var tail: RootOrNode) extends NodeOrLeaf with RootOrNode {
+    final class Node(var tail: RootOrNode) extends NodeOrLeaf with RootOrNode {
       @elidable(INFO) val id = nextNodeID()
       @elidable(INFO) override def toString = id.toString
     }
 
-    private case object RootNode extends RootOrNode {
+    case object RootNode extends RootOrNode {
       override def toString = "0"
     }
 
-    private sealed trait EdgeLike {
+    sealed trait Edge {
+      /*
+       * The position in the corpus the edge's starting point corresponds to
+       */
       def startIdx: Int
+      /*
+       * The position in the corpus the edge's stopping point corresponds to
+       */
       def stopIdx: Int
+      /*
+       * Same as `stopIdx - startIdx`
+       */
       def span: Int
-      def targetNode: RootOrNodeOrLeaf
-    }
-
-    private sealed trait Edge extends EdgeLike {
+      /*
+       * The target node the edge is pointing to
+       */
       def targetNode: NodeOrLeaf
+      /*
+       * Creates a copy of this edge with the starting index advanced. This is used in node splitting
+       */
       def replaceStart(newStart: Int): Edge
     }
 
-//    private case object DummyEdge extends EdgeLike {
-//      def startIdx: Int = 0
-//      def stopIdx: Int = 0
-//      def span: Int = 0
-//      def targetNode: RootOrNodeOrLeaf = RootNode
-//    }
-
-    private final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
+    /*
+     * An edge going from a root or inner node to another inner node.
+     */
+    final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
       override def toString = "InnerEdge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
       def span = stopIdx - startIdx
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
 
-    private final case class LeafEdge(startIdx: Int) extends Edge {
+    /*
+     * An edge going from a root or inner node to a leaf. Therefore the `stopIdx` corresponds to the
+     * size of the corpus. If the corpus grows, `stopIdx` will reflect this accordingly.
+     */
+    final case class LeafEdge(startIdx: Int) extends Edge {
       override def toString = "LeafEdge(start=" + startIdx + ")"
       def targetNode: NodeOrLeaf = Leaf
       def stopIdx = corpus.length
@@ -520,11 +454,12 @@ object ContextTree {
       xs.forall(c.tryMove)
     }
 
-    def size: Int = corpus.length
-    def length: Int = corpus.length
-    def isEmpty: Boolean = corpus.isEmpty
-    def nonEmpty: Boolean = corpus.nonEmpty
-    def apply(idx: Int): A = corpus(idx)
+    def size: Int           = corpus.length
+    def length: Int         = corpus.length
+    def isEmpty: Boolean    = corpus.isEmpty
+    def nonEmpty: Boolean   = corpus.nonEmpty
+    def apply(idx: Int): A  = corpus(idx)
+
     def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = corpus.to(cbf)
 
@@ -564,28 +499,31 @@ object ContextTree {
       sb.toString
     }
 
+    /*
+     * Splits the edge according at an offset corresponding to the `active`'s span.
+     * This produces a new inner node. The `edge`'s `source` node will be updated
+     * to replace `edge` by a new edge which points to this new inner node. The old
+     * `edge` itself will be truncated at the beginning, and replaced.
+     *
+     * The method returns the new node to which the `add1` algorithm can add
+     * another outgoing leaf edge.
+     */
     @inline private def split(edge: Edge): Node = {
-      val startIdx    = edge.startIdx
-      val startElem   = corpus(startIdx)
-      val splitIdx    = startIdx + active.span
-      val newNode     = new Node(active.source)
-      val newEdge1    = InnerEdge(startIdx, splitIdx, newNode)
+      val startIdx         = edge.startIdx
+      val startElem        = corpus(startIdx)
+      val splitIdx         = startIdx + active.span
+      val newNode          = new Node(active.source)
+      val newEdge1         = InnerEdge(startIdx, splitIdx, newNode)
       active.source.edges += ((startElem, newEdge1))
-      val newEdge2    = edge.replaceStart(splitIdx)
-      newNode.edges  += ((corpus(splitIdx), newEdge2))
+      val newEdge2         = edge.replaceStart(splitIdx)
+      newNode.edges       += ((corpus(splitIdx), newEdge2))
       DEBUG_LOG("SPLIT: " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }
 
-    def +=(elem: A): this.type = { add1(elem); this }
-
-    def append(elem: A*) {
-      elem foreach add1
-    }
-
-    def appendAll(xs: TraversableOnce[A]) {
-      xs foreach add1
-    }
+    def +=(elem: A): this.type =          { add1(elem); this }
+    def append(elem: A*)                  { elem foreach add1 }
+    def appendAll(xs: TraversableOnce[A]) { xs foreach add1 }
 
     private def add1(elem: A) {
       val elemIdx     = corpus.length
@@ -604,15 +542,20 @@ object ContextTree {
 
       @tailrec def loop(prev: RootOrNode): RootOrNode = {
         val parent = if (active.isExplicit) {
+          // if we are on an explicit node which already has an outgoing edge for the element, we're done
           if (active.source.edges.contains(elem)) return prev
+          // otherwise use this node as source for a new edge
           active.source
         } else {
           val edge = active.source.edges(corpus(active.startIdx))
+          // if we are on an implicit node and the next element equals the given element, we're done
           if (corpus(edge.startIdx + active.span) == elem) return prev
+          // otherwise submit the edge representing the implicit node to a split, returning the
+          // new source node to which the new (leaf) edge can be added
           split(edge)
         }
 
-        // create new leaf edge starting at parentNode
+        // create new leaf edge starting at the parent node
         val newEdge = LeafEdge(elemIdx)
         parent.edges += ((elem, newEdge))
         addLink(prev, parent)
@@ -632,8 +575,7 @@ object ContextTree {
 }
 
 /**
- * A mutable data append-only structure that support efficient searching for sub-sequences.
- * In this version, it is just a suffix tree.
+ * A mutable data append-only suffix tree that support efficient searching for sub-sequences.
  *
  * @tparam A  the element type of the structure
  */
@@ -678,8 +620,6 @@ trait ContextTree[A] extends ContextTree.Like[A] {
    * @return    `true` if the element is included in the tree, `false` otherwise
    */
   def contains(elem: A): Boolean
-  
-//  def indexOfSlice(xs: TraversableOnce[A]): Int
 
   /**
    * Creates a new snake through the tree from a given initial sequence.
