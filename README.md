@@ -17,7 +17,7 @@ The following short example illustrates the initial suffix tree (you can experim
 ```scala
 
     val c = ContextTree("BANANA": _*)
-    Seq[Seq[Char]]("BAN", "ANA", "FOO").map(c.contains) // true, true, false
+    Seq[Seq[Char]]("BAN", "ANA", "FOO").map(c.containsSlice) // true, true, false
     c += 'S'
     c.containsSlice("ANANAS") // true
 
@@ -35,4 +35,6 @@ Begin of snake design (start in `sbt test:console`):
 
 ### todo
 
-Eventually should be `@specialized`, but this will only make sense if scala-collections are specialized, since they are used as helper structures internally.
+- eventually should be `@specialized`, but this will only make sense if scala-collections are specialized, since they are used as helper structures internally.
+- should count frequencies to do a weighted choice among successors?
+- should allow to cast elements into coarser bins

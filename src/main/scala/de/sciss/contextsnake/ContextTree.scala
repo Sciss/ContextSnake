@@ -235,7 +235,7 @@ object ContextTree {
 
       def prefix = "Cursor@" + hashCode().toHexString
 
-      private def initFromNode(n: RootOrNode, elem: A): Boolean = {
+      @inline private def initFromNode(n: RootOrNode, elem: A): Boolean = {
         val edgeOption  = n.edges.get(elem)
         val found       = edgeOption.isDefined
         if (found) {
@@ -283,7 +283,24 @@ object ContextTree {
       /**
        * Drops the last element in the suffix
        */
-      def trimEnd() { ??? }
+      def trimEnd() {
+        if (isExplicit) {
+          source match {
+            case n: Node =>
+              val parent  = n.init
+              val edge    = parent.edges(corpus(startIdx))
+              source      = parent
+              stopIdx     = edge.stopIdx - 1
+              startIdx    = edge.startIdx
+
+            case RootNode =>
+              throw new UnsupportedOperationException("trimEnd on the beginning of the corpus")
+          }
+        } else {
+          stopIdx -= 1
+        }
+        if (exhausted) exhausted = false
+      }
 
       /**
        * Queries the possible successor elements of the current suffix
@@ -382,9 +399,13 @@ object ContextTree {
     case object Leaf extends NodeOrLeaf
 
     object Node {
+      // extracts the tail parameter
       def unapply(n: Node): Option[RootOrNode] = Some(n.tail)
     }
-    final class Node(var tail: RootOrNode) extends NodeOrLeaf with RootOrNode {
+    final class Node(parent: RootOrNode) extends NodeOrLeaf with RootOrNode {
+      var tail: RootOrNode = parent
+      var init: RootOrNode = parent
+
       @elidable(INFO) val id = nextNodeID()
       @elidable(INFO) override def toString = id.toString
     }
@@ -517,6 +538,10 @@ object ContextTree {
       active.source.edges += ((startElem, newEdge1))
       val newEdge2         = edge.replaceStart(splitIdx)
       newNode.edges       += ((corpus(splitIdx), newEdge2))
+      edge.targetNode match {
+        case n: Node => n.init = newNode
+        case _ =>
+      }
       DEBUG_LOG("SPLIT: " + edge + " -> new1 = " + newEdge1 + "; new2 = " + newEdge2)
       newNode
     }
