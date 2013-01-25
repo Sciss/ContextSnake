@@ -19,7 +19,7 @@ The following short example illustrates the initial suffix tree (you can experim
     val c = ContextTree("BANANA": _*)
     Seq[Seq[Char]]("BAN", "ANA", "FOO").map(c.contains) // true, true, false
     c += 'S'
-    c.contains("ANANAS") // true
+    c.containsSlice("ANANAS") // true
 
 ```
 
