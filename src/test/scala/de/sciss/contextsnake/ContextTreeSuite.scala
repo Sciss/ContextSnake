@@ -13,7 +13,7 @@ class ContextTreeSuite extends FunSuite {
     Ms.foreach(test1)
   }
 
-  private def test1(M: Int) {
+  private def test1(M: Int): Unit = {
     val r   = new util.Random(seed)
     val v   = Vector.fill(N)(r.nextInt(M))
     val c   = ContextTree.empty[Int]

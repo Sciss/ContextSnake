@@ -2,7 +2,7 @@
  *  ContextTree.scala
  *  (ContextTree)
  *
- *  Copyright (c) 2013 Hanns Holger Rutz. All rights reserved.
+ *  Copyright (c) 2013-2014 Hanns Holger Rutz. All rights reserved.
  *
  *  This software is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -31,33 +31,30 @@ import elidable.INFO
 import collection.generic.CanBuildFrom
 
 object ContextTree {
-  /**
-   * Creates a new empty context tree for a given element type.
-   * Elements can then be added using `+=`, `append`, or `appendAll`.
-   *
-   * @tparam A  the element type
-   */
+  /** Creates a new empty context tree for a given element type.
+    * Elements can then be added using `+=`, `append`, or `appendAll`.
+    *
+    * @tparam A  the element type
+    */
   def empty[A]: ContextTree[A] = new Impl[A]
 
-  /**
-   * Creates a context tree populated with the given elements.
-   *
-   * @param elem  the elements to add in their original order
-   * @tparam A    the element type
-   */
+  /** Creates a context tree populated with the given elements.
+    *
+    * @param elem  the elements to add in their original order
+    * @tparam A    the element type
+    */
   def apply[A](elem: A*): ContextTree[A] = {
     val res = empty[A]
     res.appendAll(elem)
     res
   }
 
-  /**
-   * A common trait to the suffix tree and navigating snakes.
-   * Since they are backed by a `collection.mutable.Buffer`, most operations
-   * exposed here use the buffer terminology.
-   *
-   * @tparam A  the element type of the tree/snake
-   */
+  /** A common trait to the suffix tree and navigating snakes.
+    * Since they are backed by a `collection.mutable.Buffer`, most operations
+    * exposed here use the buffer terminology.
+    *
+    * @tparam A  the element type of the tree/snake
+    */
   trait Like[A] {
     def size: Int
     def length: Int
@@ -70,85 +67,71 @@ object ContextTree {
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
-  /**
-   * A `Snake` represents a sliding window over a context tree's corpus.
-   */
+  /** A `Snake` represents a sliding window over a context tree's corpus. */
   trait Snake[A] extends Like[A] {
-    /**
-     * The size of the snake. Same as `length`
-     */
+    /** The size of the snake. Same as `length`. */
     def size: Int
 
-    /**
-     * The number of elements in the snake.
-     */
+    /** The number of elements in the snake. */
     def length: Int
 
-    /**
-     * Removes the last `n` elements in the snake.
-     * Throws an exception if `n` is greater than `length`.
-     *
-     * @param n the number of elements to drop from the end
-     */
+    /** Removes the last `n` elements in the snake.
+      * Throws an exception if `n` is greater than `length`.
+      *
+      * @param n the number of elements to drop from the end
+      */
     def trimEnd(n: Int): Unit
 
-    /**
-     * Removes the first `n` elements in the snake.
-     * Throws an exception if `n` is greater than `length`.
-     *
-     * @param n the number of elements to drop from the beginning
-     */
+    /** Removes the first `n` elements in the snake.
+      * Throws an exception if `n` is greater than `length`.
+      *
+      * @param n the number of elements to drop from the beginning
+      */
     def trimStart(n: Int): Unit
 
     def successors: Iterator[A]
 
-    /**
-     * Appends a single element to the snake. Throws an exception if the element is
-     * not a possible successor of the current body.
-     *
-     * @param elem the element to append
-     */
+    /** Appends a single element to the snake. Throws an exception if the element is
+      * not a possible successor of the current body.
+      *
+      * @param elem the element to append
+      */
     def +=(elem: A): this.type
 
-    /**
-     * Appends multiple elements to the snake. Throws an exception if the elements do
-     * not form a valid growth path from the current body.
-     *
-     * @param elems the elements to append
-     */
+    /** Appends multiple elements to the snake. Throws an exception if the elements do
+      * not form a valid growth path from the current body.
+      *
+      * @param elems the elements to append
+      */
     def append(elems: A*): Unit
 
-    /**
-     * Appends all elements of a collection to the snake. Throws an exception if the elements do
-     * not form a valid growth path from the current body.
-     *
-     * @param xs  the collection whose elements should be appended
-     */
+    /** Appends all elements of a collection to the snake. Throws an exception if the elements do
+      * not form a valid growth path from the current body.
+      *
+      * @param xs  the collection whose elements should be appended
+      */
     def appendAll(xs: TraversableOnce[A]): Unit
 
-    /**
-     * Retrieves the element from the snake's body at a given position. If the position
-     * is less than zero or greater than or equal to the snake's length, an exception is thrown.
-     *
-     * @param idx the index into the snake
-     * @return  the element at the given index
-     */
+    /** Retrieves the element from the snake's body at a given position. If the position
+      * is less than zero or greater than or equal to the snake's length, an exception is thrown.
+      *
+      * @param idx the index into the snake
+      * @return  the element at the given index
+      */
     def apply(idx: Int): A
 
-    /**
-     * Copies the snake's current body to a new independent collection.
-     *
-     * @param cbf   the builder factory for the target collection
-     * @tparam Col  the type of the target collection
-     * @return  the copied collection
-     */
+    /** Copies the snake's current body to a new independent collection.
+      *
+      * @param cbf   the builder factory for the target collection
+      * @tparam Col  the type of the target collection
+      * @return  the copied collection
+      */
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
   @elidable(INFO) private final val DEBUG = false
-  @elidable(INFO) private def DEBUG_LOG(message: => String) {
+  @elidable(INFO) private def DEBUG_LOG(message: => String): Unit =
     if (DEBUG) println(message)
-  }
 
   private final class Impl[A] extends ContextTree[A] {
     val corpus = mutable.Buffer.empty[A]
@@ -167,10 +150,10 @@ object ContextTree {
       final def isExplicit  = startIdx >= stopIdx
       final def span        = stopIdx - startIdx
 
-      final def dropToTail() {
+      final def dropToTail(): Unit = {
         source match {
           case Node(tail) =>
-            DEBUG_LOG("DROP: Suffix link from " + source + " to " + tail)
+            DEBUG_LOG(s"DROP: Suffix link from $source to $tail")
             source = tail
           case RootNode =>
             DEBUG_LOG("DROP: At root")
@@ -190,14 +173,14 @@ object ContextTree {
        * and the offset shoots past that node's end, we drop to the edge's
        * target node and repeat the check.
        */
-      final def canonize() {
-        DEBUG_LOG(">>>> CANONIZE " + this)
+      final def canonize(): Unit = {
+        DEBUG_LOG(s">>>> CANONIZE $this")
         while (!isExplicit) {
           val edge       = source.edges(corpus(startIdx))
           val edgeSpan   = edge.span
-          DEBUG_LOG("     edges(" + corpus(startIdx) + ") = " + edge)
+          DEBUG_LOG(s"     edges(${corpus(startIdx)}) = $edge")
           if (edgeSpan > span) {
-            DEBUG_LOG("<<<< CANONIZE " + this + "\n")
+            DEBUG_LOG(s"<<<< CANONIZE $this\n")
             return
           }
           edge.targetNode match {
@@ -206,12 +189,12 @@ object ContextTree {
               startIdx  += edgeSpan
             case Leaf =>
               reachedLeaf()
-              DEBUG_LOG("<<<< CANONIZE (LEAF) " + this)
+              DEBUG_LOG(s"<<<< CANONIZE (LEAF) $this")
               return
           }
-          DEBUG_LOG("     now " + this)
+          DEBUG_LOG(s"     now $this")
         }
-        DEBUG_LOG("<<<< CANONIZE " + this)
+        DEBUG_LOG(s"<<<< CANONIZE $this")
       }
 
       /*
@@ -219,21 +202,22 @@ object ContextTree {
        */
       def prefix: String
 
-      override def toString = prefix + "(start=" + startIdx + ", stop=" + stopIdx + {
+      override def toString = {
           val num = span
-          if (num > 0) {
-            corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
-              if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
-          } else {
-            ""
-          }
-        } + ", source=" + source + ")"
+        val seqInfo = if (num > 0) {
+          corpus.view(startIdx, math.min(stopIdx, startIdx + 4)).mkString(", seq=<", ",",
+            if (num > 4) ",...," + corpus(stopIdx - 1) + ">" else ">")
+        } else {
+          ""
+        }
+        s"$prefix(start=$startIdx, stop=$stopIdx$seqInfo, source=$source)"
+      }
     }
 
     final class Cursor extends Position {
       private var exhausted = false // when the cursor's last position has come to the very end of the corpus
 
-      def prefix = "Cursor@" + hashCode().toHexString
+      def prefix = s"Cursor@${hashCode().toHexString}"
 
       @inline private def initFromNode(n: RootOrNode, elem: A): Boolean = {
         val edgeOption  = n.edges.get(elem)
@@ -248,19 +232,17 @@ object ContextTree {
       }
 
       // sets the `exhausted` flag which is used in `tryMove` and `successors`
-      def reachedLeaf() {
+      def reachedLeaf(): Unit =
         exhausted = true
-      }
 
       // the next element, assuming we are on an implicit node
       @inline private def implicitNext = corpus(stopIdx)
 
-      /**
-       * Tries to move the cursor one position forward by selecting the given element.
-       *
-       * @param elem  the element to follow to
-       * @return      `true` if the element was a possible successor, `false` if not (this aborts the move)
-       */
+      /** Tries to move the cursor one position forward by selecting the given element.
+        *
+        * @param elem  the element to follow to
+        * @return      `true` if the element was a possible successor, `false` if not (this aborts the move)
+        */
       def tryMove(elem: A): Boolean = {
         val found = if (isExplicit) {
           initFromNode(source, elem)
@@ -275,15 +257,11 @@ object ContextTree {
         found
       }
 
-      /**
-       * Drops the first element in the suffix
-       */
-      def trimStart() { dropToTail() }
+      /** Drops the first element in the suffix. */
+      def trimStart(): Unit = dropToTail()
 
-      /**
-       * Drops the last element in the suffix
-       */
-      def trimEnd() {
+      /** Drops the last element in the suffix. */
+      def trimEnd(): Unit = {
         if (isExplicit) {
           source match {
             case n: Node =>
@@ -302,14 +280,13 @@ object ContextTree {
         if (exhausted) exhausted = false
       }
 
-      /**
-       * Queries the possible successor elements of the current suffix
-       *
-       * @return  an iterator over the possible elements (any of which can be safely passed to `tryMove`).
-       *          This will be empty if the cursor is exhausted. It will be `1` if the cursor is currently on
-       *          and implicit node.
-       */
-      def successors: Iterator[A] = {
+      /** Queries the possible successor elements of the current suffix
+        *
+        * @return  an iterator over the possible elements (any of which can be safely passed to `tryMove`).
+        *          This will be empty if the cursor is exhausted. It will be `1` if the cursor is currently on
+        *          and implicit node.
+        */
+      def successors: Iterator[A] =
         if (isExplicit) {
           source.edges.keysIterator
         } else if (exhausted) {
@@ -317,12 +294,13 @@ object ContextTree {
         } else {
           Iterator.single(implicitNext)
         }
-      }
     }
 
     private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[A] {
-      override def toString = "ContextTree.Snake(len=" + length +
-        (if (length > 0) ", head=" + body.head + ", last=" + body.last else "") + ")@" + hashCode().toHexString // + "; csr=" + c
+      override def toString = {
+        val headInfo = if (length > 0) s", head=${body.head}, last=${body.last}" else ""
+        s"ContextTree.Snake(len=$length$headInfo)@${hashCode().toHexString}" // + "; csr=" + c
+      }
 
       def size: Int         = body.length
       def length: Int       = body.length
@@ -334,7 +312,7 @@ object ContextTree {
       def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
       def apply(idx: Int): A = body(idx)
 
-      def trimEnd(n: Int) {
+      def trimEnd(n: Int): Unit = {
         if (n > size) throw new IndexOutOfBoundsException((n - size).toString)
         var m = 0
         while (m < n) {
@@ -344,7 +322,7 @@ object ContextTree {
         body.trimEnd(n)
       }
 
-      def trimStart(n: Int) {
+      def trimStart(n: Int): Unit = {
         if (n > size) throw new IndexOutOfBoundsException((n - size).toString)
         var m = 0
         while (m < n) {
@@ -354,15 +332,16 @@ object ContextTree {
         body.trimStart(n)
       }
 
-      def appendAll(xs: TraversableOnce[A]) {
-        xs.foreach(add1)
+      def appendAll(xs: TraversableOnce[A]): Unit = xs.foreach(add1)
+
+      def append(elems: A*): Unit = appendAll(elems)
+
+      def +=(elem: A): this.type = {
+        snakeAdd1(elem)
+        this
       }
 
-      def append(elems: A*) { appendAll(elems) }
-
-      def +=(elem: A): this.type = { snakeAdd1(elem); this }
-
-      private def snakeAdd1(elem: A) {
+      private def snakeAdd1(elem: A): Unit = {
         if (!c.tryMove(elem)) throw new NoSuchElementException(elem.toString)
         body += elem
       }
@@ -372,9 +351,8 @@ object ContextTree {
       def prefix = "active"
 
       // the active point should never reach a leaf
-      def reachedLeaf() {
+      def reachedLeaf(): Unit =
         assert(assertion = false)
-      }
     }
 
     /*
@@ -441,7 +419,7 @@ object ContextTree {
      * An edge going from a root or inner node to another inner node.
      */
     final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
-      override def toString = "InnerEdge(start=" + startIdx + ", stop=" + stopIdx + ", target=" + targetNode + ")"
+      override def toString = s"InnerEdge(start=$startIdx, stop=$stopIdx, target=$targetNode)"
       def span = stopIdx - startIdx
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
@@ -458,7 +436,7 @@ object ContextTree {
       def replaceStart(newStart: Int) = copy(startIdx = newStart)
     }
 
-    override def toString = "ContextTree(len=" + corpus.length + ")@" + hashCode().toHexString
+    override def toString = s"ContextTree(len=${corpus.length})@${hashCode().toHexString}"
 
     def snake(init: TraversableOnce[A]): Snake[A] = {
       val body  = init.toBuffer
@@ -490,7 +468,7 @@ object ContextTree {
 
       var leafCnt = 0
 
-      def appendNode(source: RootOrNode) {
+      def appendNode(source: RootOrNode): Unit = {
         sb.append("  " + source + " [shape=circle];\n")
         source.edges.foreach { case (_, edge) =>
           val str     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
@@ -546,24 +524,27 @@ object ContextTree {
       newNode
     }
 
-    def +=(elem: A): this.type =          { add1(elem); this }
-    def append(elem: A*)                  { elem foreach add1 }
-    def appendAll(xs: TraversableOnce[A]) { xs foreach add1 }
+    def +=(elem: A): this.type = {
+      add1(elem)
+      this
+    }
 
-    private def add1(elem: A) {
+    def append   (elem: A*)              : Unit = elem foreach add1
+    def appendAll(xs: TraversableOnce[A]): Unit = xs   foreach add1
+
+    private def add1(elem: A): Unit = {
       val elemIdx     = corpus.length
       corpus         += elem
 
-      DEBUG_LOG("ADD: elem=" + elem + "; " + active)
+      DEBUG_LOG(s"ADD: elem=$elem; $active")
 
-      def addLink(n: RootOrNode, parent: RootOrNode) {
+      def addLink(n: RootOrNode, parent: RootOrNode): Unit =
         n match {
           case n: Node =>
-            DEBUG_LOG("LINK: from " + n + " to " + parent)
+            DEBUG_LOG(s"LINK: from $n to $parent")
             n.tail = parent
           case RootNode =>
         }
-      }
 
       @tailrec def loop(prev: RootOrNode): RootOrNode = {
         val parent = if (active.isExplicit) {
@@ -599,131 +580,112 @@ object ContextTree {
   }
 }
 
-/**
- * A mutable data append-only suffix tree that support efficient searching for sub-sequences.
- *
- * @tparam A  the element type of the structure
- */
+/** A mutable data append-only suffix tree that support efficient searching for sub-sequences.
+  *
+  * @tparam A  the element type of the structure
+  */
 trait ContextTree[A] extends ContextTree.Like[A] {
-  /**
-   * Appends an element to the tree.
-   *
-   * @param elem  the element to append
-   * @return      this same tree
-   */
+  /** Appends an element to the tree.
+    *
+    * @param elem  the element to append
+    * @return      this same tree
+    */
   def +=(elem: A): this.type
 
-  /**
-   * Appends multiple elements to the tree
-   *
-   * @param elems the elements to append
-   */
+  /** Appends multiple elements to the tree
+    *
+    * @param elems the elements to append
+    */
   def append(elems: A*): Unit
 
-  /**
-   * Appends all elements of a collection to the tree. The elements are
-   * appended in the order in which they are contained in the argument.
-   *
-   * @param xs  the collection whose elements should be appended
-   */
+  /** Appends all elements of a collection to the tree. The elements are
+    * appended in the order in which they are contained in the argument.
+    *
+    * @param xs  the collection whose elements should be appended
+    */
   def appendAll(xs: TraversableOnce[A]): Unit
 
-  /**
-   * Tests whether a given sub-sequence is contained in the tree.
-   * This is a very fast operation taking O(|xs|).
-   *
-   * @param xs  the sequence to look for
-   * @return    `true` if the sequence is included in the tree, `false` otherwise
-   */
+  /** Tests whether a given sub-sequence is contained in the tree.
+    * This is a very fast operation taking O(|xs|).
+    *
+    * @param xs  the sequence to look for
+    * @return    `true` if the sequence is included in the tree, `false` otherwise
+    */
   def containsSlice(xs: TraversableOnce[A]): Boolean
 
-  /**
-   * Tests whether an element is contained in the tree.
-   * This is a constant time operation.
-   *
-   * @param elem  the element to look for
-   * @return    `true` if the element is included in the tree, `false` otherwise
-   */
+  /** Tests whether an element is contained in the tree.
+    * This is a constant time operation.
+    *
+    * @param elem  the element to look for
+    * @return    `true` if the element is included in the tree, `false` otherwise
+    */
   def contains(elem: A): Boolean
 
-  /**
-   * Creates a new snake through the tree from a given initial sequence.
-   * This initial sequence must be contained in the tree (e.g. `containsSlice` must return `true`),
-   * otherwise an exception is thrown.
-   *
-   * To construct a snake from a particular index range of the tree, use
-   * `snake(view(from, until))`. Note that because the sequence might occur multiple
-   * times in the corpus, this does not guarantee any particular resulting index
-   * into the tree.
-   *
-   * @param init  the sequence to begin with
-   * @return  a new snake whose content is `init`
-   */
+  /** Creates a new snake through the tree from a given initial sequence.
+    * This initial sequence must be contained in the tree (e.g. `containsSlice` must return `true`),
+    * otherwise an exception is thrown.
+    *
+    * To construct a snake from a particular index range of the tree, use
+    * `snake(view(from, until))`. Note that because the sequence might occur multiple
+    * times in the corpus, this does not guarantee any particular resulting index
+    * into the tree.
+    *
+    * @param init  the sequence to begin with
+    * @return  a new snake whose content is `init`
+    */
   def snake(init: TraversableOnce[A]): ContextTree.Snake[A]
 
-  /**
-   * Queries the number of elements in the tree
-   */
+  /** Queries the number of elements in the tree. */
   def size: Int
 
-  /**
-   * The length of the collection in this tree. Same as `size`
-   */
+  /** The length of the collection in this tree. Same as `size`. */
   def length: Int
 
-  /**
-   * Queries whether the collection is empty (has zero elements)
-   */
+  /** Queries whether the collection is empty (has zero elements). */
   def isEmpty: Boolean
 
-  /**
-   * Queries whether the collection non-empty (has one or more elements)
-   */
+  /** Queries whether the collection non-empty (has one or more elements). */
   def nonEmpty: Boolean
 
-  /**
-   * Queries an element at a given index. Throws an exception if the `idx` argument
-   * is negative or greater than or equal to the size of the tree.
-   *
-   * @param idx the index of the element
-   * @return  the element at the given index
-   */
+  /** Queries an element at a given index. Throws an exception if the `idx` argument
+    * is negative or greater than or equal to the size of the tree.
+    *
+    * @param idx the index of the element
+    * @return  the element at the given index
+    */
   def apply(idx: Int): A
 
-  /**
-   * Provides a view of a range of the underlying buffer. Technically, because
-   * the underlying buffer is mutable, this view would be subject to mutations as well until
-   * a copy is built. However, since the tree is append-only, the portion visible
-   * in the view will never change.
-   *
-   * Note that, like the `view` method in `collection.mutable.Buffer`, the range is
-   * clipped to the length of the underlying buffer _at this moment_. For example,
-   * if the buffer currently has 6 elements, a `view(7,8)` is treated as `view(6,6)`
-   * and will always be empty. Therefore it is save to treat the view as immutable.
-   *
-   * @param from  the start index into the collection
-   * @param until the stop index (exclusive) into the collection
-   *
-   * @return  a view of the given range.
-   */
+  /** Provides a view of a range of the underlying buffer. Technically, because
+    * the underlying buffer is mutable, this view would be subject to mutations as well until
+    * a copy is built. However, since the tree is append-only, the portion visible
+    * in the view will never change.
+    *
+    * Note that, like the `view` method in `collection.mutable.Buffer`, the range is
+    * clipped to the length of the underlying buffer _at this moment_. For example,
+    * if the buffer currently has 6 elements, a `view(7,8)` is treated as `view(6,6)`
+    * and will always be empty. Therefore it is save to treat the view as immutable.
+    *
+    * @param from  the start index into the collection
+    * @param until the stop index (exclusive) into the collection
+    *
+    * @return  a view of the given range.
+    */
   def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]]
 
-  /**
-   * Converts this tree into another collection by copying all elements.
-   *
-   * @param cbf   the builder factory which determines the target collection type
-   * @tparam Col  the target collection type
-   * @return  a new independent collection containing all elements of this tree
-   */
+  /** Converts this tree into another collection by copying all elements.
+    *
+    * @param cbf   the builder factory which determines the target collection type
+    * @tparam Col  the target collection type
+    * @return  a new independent collection containing all elements of this tree
+    */
   def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
 
-  /**
-   * Helper method to export the tree to GraphViz DOT format.
-   * This is mostly for debugging or demonstration purposes and might not be
-   * particularly efficient or suitable for large trees.
-   *
-   * @param tailEdges whether to include the tail (suffix-pointer) edges or not
-   * @return  a string representation in DOT format
-   */
+  /** Helper method to export the tree to GraphViz DOT format.
+    * This is mostly for debugging or demonstration purposes and might not be
+    * particularly efficient or suitable for large trees.
+    *
+    * @param tailEdges whether to include the tail (suffix-pointer) edges or not
+    * @return  a string representation in DOT format
+    */
   def toDOT(tailEdges: Boolean = false, sep: String = ""): String
 }

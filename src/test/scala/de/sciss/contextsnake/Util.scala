@@ -4,7 +4,7 @@ import annotation.{elidable, tailrec}
 
 object Util {
   def expandWhileChoice[A](s: ContextTree.Snake[A], minChoice: Int = 2, maxLength: Int = 1000): Vector[A] = {
-    @tailrec def loop(i: Int) {
+    @tailrec def loop(i: Int): Unit = {
       if (i == maxLength) return
       val sq  = s.successors.to[Vector]
       val sz  = sq.size
@@ -46,11 +46,8 @@ object Util {
     b.result()
   }
 
-  @elidable(elidable.INFO) private def printElision() {
-    println ("INFO level logging enabled.")
-  }
+  @elidable(elidable.INFO) private def printElision(): Unit =
+    println("INFO level logging enabled.")
 
-  def elision() {
-    printElision()
-  }
+  def elision(): Unit = printElision()
 }
