@@ -25,10 +25,8 @@
 
 package de.sciss.contextsnake.txn
 
-import collection.{SeqView, mutable}
 import scala.annotation.{switch, elidable, tailrec}
 import elidable.INFO
-import collection.generic.CanBuildFrom
 import de.sciss.lucre.stm.{Mutable, Sys}
 import de.sciss.lucre.data.SkipOctree
 import de.sciss.lucre.geom.Space
@@ -56,6 +54,7 @@ object ContextTree {
 
       val activeSource  : S#Var[RootOrNode] = tx.newVar(id, RootNode: RootOrNode)(RootOrNodeSerializer)
 
+      val corpus = impl.LinkedList.empty[S, A]
     }
   }
 
@@ -79,24 +78,29 @@ object ContextTree {
     * @tparam A  the element type of the tree/snake
     */
   trait Like[S <: Sys[S], A] {
-    def size: Int
-    def length: Int
-    def isEmpty: Boolean
-    def nonEmpty: Boolean
+    def size    (implicit tx: S#Tx): Int
+    def length  (implicit tx: S#Tx): Int
+
+    def isEmpty (implicit tx: S#Tx): Boolean
+    def nonEmpty(implicit tx: S#Tx): Boolean
+
     def +=(elem: A)(implicit tx: S#Tx): this.type
     def append(elems: A*)(implicit tx: S#Tx): Unit
     def appendAll(xs: TraversableOnce[A])(implicit tx: S#Tx): Unit
-    def apply(idx: Int): A
-    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+
+    def apply(idx: Int)(implicit tx: S#Tx): A
+
+    def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A]
+    // def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
   }
 
   /** A `Snake` represents a sliding window over a context tree's corpus. */
   trait Snake[S <: Sys[S], A] extends Like[S, A] {
     /** The size of the snake. Same as `length`. */
-    def size: Int
+    def size(implicit tx: S#Tx): Int
 
     /** The number of elements in the snake. */
-    def length: Int
+    def length(implicit tx: S#Tx): Int
 
     /** Removes the last `n` elements in the snake.
       * Throws an exception if `n` is greater than `length`.
@@ -141,15 +145,17 @@ object ContextTree {
       * @param idx the index into the snake
       * @return  the element at the given index
       */
-    def apply(idx: Int): A
+    def apply(idx: Int)(implicit tx: S#Tx): A
 
-    /** Copies the snake's current body to a new independent collection.
-      *
-      * @param cbf   the builder factory for the target collection
-      * @tparam Col  the type of the target collection
-      * @return  the copied collection
-      */
-    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+    //    /** Copies the snake's current body to a new independent collection.
+    //      *
+    //      * @param cbf   the builder factory for the target collection
+    //      * @tparam Col  the type of the target collection
+    //      * @return  the copied collection
+    //      */
+    //    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+
+    def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A]
   }
 
   @elidable(INFO) private final val DEBUG = false
@@ -167,7 +173,7 @@ object ContextTree {
     protected def activeStopIdx : S#Var[Int]
     protected def activeSource  : S#Var[RootOrNode]
 
-    protected def corpus: mutable.Buffer[A] = ???
+    protected def corpus: impl.LinkedList[S, A]
 
     // ---- implemented ----
 
@@ -178,7 +184,7 @@ object ContextTree {
 
     // val corpus = mutable.Buffer.empty[A]
 
-protected def writeData(out: DataOutput): Unit = {
+    protected def writeData(out: DataOutput): Unit = {
       rootEdges     .write(out)
       activeStartIdx.write(out)
       activeStopIdx .write(out)
@@ -200,7 +206,7 @@ protected def writeData(out: DataOutput): Unit = {
             val startIdx    = in.readInt()
             val stopIdx     = in.readInt()
             val targetNode  = Node.read(in, access)
-            new InnerEdge(startIdx = startIdx, stopIdx = stopIdx, targetNode = targetNode)
+            new InnerEdge(startIdxVal = startIdx, stopIdxVal = stopIdx, targetNode = targetNode)
 
           case 1 => // LeafEdge
             val startIdx = in.readInt()
@@ -397,21 +403,21 @@ protected def writeData(out: DataOutput): Unit = {
         }
     }
 
-    private final class SnakeImpl(body: mutable.Buffer[A], c: Cursor) extends Snake[S, A] {
-      override def toString = {
-        val headInfo = if (length > 0) s", head=${body.head}, last=${body.last}" else ""
-        s"ContextTree.Snake(len=$length$headInfo)@${hashCode().toHexString}" // + "; csr=" + c
-      }
+    private final class SnakeImpl(body: impl.LinkedList[S, A], c: Cursor) extends Snake[S, A] {
+      override def toString = s"ContextTree.Snake@${hashCode().toHexString}"
 
-      def size: Int         = body.length
-      def length: Int       = body.length
-      def isEmpty: Boolean  = body.isEmpty
-      def nonEmpty: Boolean = body.nonEmpty
+      def size    (implicit tx: S#Tx): Int     = body.size
+      def length  (implicit tx: S#Tx): Int     = body.size
+      def isEmpty (implicit tx: S#Tx): Boolean = body.isEmpty
+      def nonEmpty(implicit tx: S#Tx): Boolean = body.nonEmpty
 
       def successors(implicit tx: S#Tx): data.Iterator[S#Tx, A] = c.successors
 
-      def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
-      def apply(idx: Int): A = body(idx)
+      //def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
+
+      def apply(idx: Int)(implicit tx: S#Tx): A = body(idx)
+
+      def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A] = body.iterator
 
       def trimEnd(n: Int)(implicit tx: S#Tx): Unit = {
         if (n > size) throw new IndexOutOfBoundsException((n - size).toString)
@@ -444,7 +450,7 @@ protected def writeData(out: DataOutput): Unit = {
 
       private def snakeAdd1(elem: A)(implicit tx: S#Tx): Unit = {
         if (!c.tryMove(elem)) throw new NoSuchElementException(elem.toString)
-        body += elem
+        body.append(elem)
       }
     }
 
@@ -553,15 +559,15 @@ protected def writeData(out: DataOutput): Unit = {
       /*
        * The position in the corpus the edge's starting point corresponds to
        */
-      def startIdx: Int
+      def startIdx(implicit tx: S#Tx): Int
       /*
        * The position in the corpus the edge's stopping point corresponds to
        */
-      def stopIdx: Int
+      def stopIdx(implicit tx: S#Tx): Int
       /*
        * Same as `stopIdx - startIdx`
        */
-      def span: Int
+      def span(implicit tx: S#Tx): Int
       /*
        * The target node the edge is pointing to
        */
@@ -575,15 +581,19 @@ protected def writeData(out: DataOutput): Unit = {
     /*
      * An edge going from a root or inner node to another inner node.
      */
-    final case class InnerEdge(startIdx: Int, stopIdx: Int, targetNode: Node) extends Edge {
-      override def toString = s"InnerEdge(start=$startIdx, stop=$stopIdx, target=$targetNode)"
-      def span = stopIdx - startIdx
-      def replaceStart(newStart: Int) = copy(startIdx = newStart)
+    final case class InnerEdge(startIdxVal: Int, stopIdxVal: Int, targetNode: Node) extends Edge {
+      override def toString = s"InnerEdge(start=$startIdxVal, stop=$stopIdxVal, target=$targetNode)"
+
+      def span(implicit tx: S#Tx) = stopIdxVal - startIdxVal
+      def replaceStart(newStart: Int) = copy(startIdxVal = newStart)
+
+      def startIdx(implicit tx: S#Tx): Int = startIdxVal
+      def stopIdx (implicit tx: S#Tx): Int = stopIdxVal
 
       def write(out: DataOutput): Unit = {
         out.writeByte(0)
-        out.writeInt(startIdx)
-        out.writeInt(stopIdx )
+        out.writeInt(startIdxVal)
+        out.writeInt(stopIdxVal )
         targetNode.write(out)
       }
     }
@@ -592,20 +602,22 @@ protected def writeData(out: DataOutput): Unit = {
      * An edge going from a root or inner node to a leaf. Therefore the `stopIdx` corresponds to the
      * size of the corpus. If the corpus grows, `stopIdx` will reflect this accordingly.
      */
-    final case class LeafEdge(startIdx: Int) extends Edge {
-      override def toString = "LeafEdge(start=" + startIdx + ")"
+    final case class LeafEdge(startIdxVal: Int) extends Edge {
+      override def toString = s"LeafEdge(start=$startIdxVal)"
       def targetNode: NodeOrLeaf = Leaf
-      def stopIdx = corpus.length
-      def span    = corpus.length - startIdx
-      def replaceStart(newStart: Int) = copy(startIdx = newStart)
+
+      def startIdx(implicit tx: S#Tx): Int = startIdxVal
+      def stopIdx (implicit tx: S#Tx): Int = corpus.size
+      def span    (implicit tx: S#Tx): Int = corpus.size - startIdxVal
+      def replaceStart(newStart: Int) = copy(startIdxVal = newStart)
 
       def write(out: DataOutput): Unit = {
         out.writeByte(1)
-        out.writeInt(startIdx)
+        out.writeInt(startIdxVal)
       }
     }
 
-    override def toString() = s"ContextTree(len=${corpus.length})@${hashCode().toHexString}"
+    override def toString() = s"ContextTree@${hashCode().toHexString}"
 
     private def mkCursor()(implicit tx: S#Tx): Cursor = {
       val cID     = tx.newID()
@@ -617,7 +629,8 @@ protected def writeData(out: DataOutput): Unit = {
     }
 
     def snake(init: TraversableOnce[A])(implicit tx: S#Tx): Snake[S, A] = {
-      val body    = init.toBuffer
+      val body    = impl.LinkedList.empty[S, A]
+      body.appendAll(init)
       val c       = mkCursor()
       if (!init.forall(c.tryMove)) throw new NoSuchElementException(init.toString)
 
@@ -636,50 +649,53 @@ protected def writeData(out: DataOutput): Unit = {
       res
     }
 
-    def size: Int           = corpus.length
-    def length: Int         = corpus.length
-    def isEmpty: Boolean    = corpus.isEmpty
-    def nonEmpty: Boolean   = corpus.nonEmpty
-    def apply(idx: Int): A  = corpus(idx)
+    def size    (implicit tx: S#Tx): Int       = corpus.size
+    def length  (implicit tx: S#Tx): Int       = corpus.size
+    def isEmpty (implicit tx: S#Tx): Boolean   = corpus.isEmpty
+    def nonEmpty(implicit tx: S#Tx): Boolean   = corpus.nonEmpty
+    def apply(idx: Int)(implicit tx: S#Tx): A  = corpus(idx)
 
-    def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
-    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = corpus.to(cbf)
+    // def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]] = corpus.view(from, until)
 
-    def toDOT(tailEdges: Boolean, sep: String)(implicit tx: S#Tx): String = {
-      val sb = new StringBuffer()
-      sb.append("digraph suffixes {\n")
+    // def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = corpus.to(cbf)
 
-      var leafCnt = 0
+    def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A] = corpus.iterator
 
-      def appendNode(source: RootOrNode)(implicit tx: S#Tx): Unit = {
-        sb.append("  " + source + " [shape=circle];\n")
-        source.edges.iterator.foreach { case (_, edge) =>
-          val str     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
-          sb.append("  " + source + " -> ")
-          edge.targetNode match {
-            case Leaf =>
-              val t = "leaf" + leafCnt
-              leafCnt += 1
-              sb.append( t + " [label=\"" + str + "\"];\n")
-              sb.append( "  " + t + " [shape=point];\n")
-            case n: Node =>
-              sb.append(n.toString + " [label=\"" + str + "\"];\n")
-              appendNode(n)
-          }
-        }
-
-        if (tailEdges) source match {
-          case Node(tail) =>
-            val target = tail
-            sb.append("  " + source + " -> " + target + " [style=dotted];\n")
-          case RootNode =>
-        }
-      }
-      appendNode(RootNode)
-
-      sb.append("}\n")
-      sb.toString
-    }
+    //    def toDOT(tailEdges: Boolean, sep: String)(implicit tx: S#Tx): String = {
+    //      val sb = new StringBuffer()
+    //      sb.append("digraph suffixes {\n")
+    //
+    //      var leafCnt = 0
+    //
+    //      def appendNode(source: RootOrNode)(implicit tx: S#Tx): Unit = {
+    //        sb.append("  " + source + " [shape=circle];\n")
+    //        source.edges.iterator.foreach { case (_, edge) =>
+    //          val str: impl.LinkedList[S, A] = ... //     = corpus.slice(edge.startIdx, edge.stopIdx).mkString(sep)
+    //          sb.append("  " + source + " -> ")
+    //          edge.targetNode match {
+    //            case Leaf =>
+    //              val t = "leaf" + leafCnt
+    //              leafCnt += 1
+    //              sb.append( t + " [label=\"" + str + "\"];\n")
+    //              sb.append( "  " + t + " [shape=point];\n")
+    //            case n: Node =>
+    //              sb.append(n.toString + " [label=\"" + str + "\"];\n")
+    //              appendNode(n)
+    //          }
+    //        }
+    //
+    //        if (tailEdges) source match {
+    //          case Node(tail) =>
+    //            val target = tail
+    //            sb.append("  " + source + " -> " + target + " [style=dotted];\n")
+    //          case RootNode =>
+    //        }
+    //      }
+    //      appendNode(RootNode)
+    //
+    //      sb.append("}\n")
+    //      sb.toString
+    //    }
 
     /*
      * Splits the edge according at an offset corresponding to the `active`'s span.
@@ -720,8 +736,8 @@ protected def writeData(out: DataOutput): Unit = {
     def appendAll(xs: TraversableOnce[A])(implicit tx: S#Tx): Unit = xs   foreach add1
 
     private def add1(elem: A)(implicit tx: S#Tx): Unit = {
-      val elemIdx     = corpus.length
-      corpus         += elem
+      val elemIdx = corpus.size
+      corpus.append(elem)
 
       DEBUG_LOG(s"ADD: elem=$elem; $active")
 
@@ -828,16 +844,16 @@ trait ContextTree[S <: Sys[S], A] extends ContextTree.Like[S, A] with Mutable[S#
   def snake(init: TraversableOnce[A])(implicit tx: S#Tx): ContextTree.Snake[S, A]
 
   /** Queries the number of elements in the tree. */
-  def size: Int
+  def size(implicit tx: S#Tx): Int
 
   /** The length of the collection in this tree. Same as `size`. */
-  def length: Int
+  def length(implicit tx: S#Tx): Int
 
   /** Queries whether the collection is empty (has zero elements). */
-  def isEmpty: Boolean
+  def isEmpty(implicit tx: S#Tx): Boolean
 
   /** Queries whether the collection non-empty (has one or more elements). */
-  def nonEmpty: Boolean
+  def nonEmpty(implicit tx: S#Tx): Boolean
 
   /** Queries an element at a given index. Throws an exception if the `idx` argument
     * is negative or greater than or equal to the size of the tree.
@@ -845,39 +861,34 @@ trait ContextTree[S <: Sys[S], A] extends ContextTree.Like[S, A] with Mutable[S#
     * @param idx the index of the element
     * @return  the element at the given index
     */
-  def apply(idx: Int): A
+  def apply(idx: Int)(implicit tx: S#Tx): A
 
-  /** Provides a view of a range of the underlying buffer. Technically, because
-    * the underlying buffer is mutable, this view would be subject to mutations as well until
-    * a copy is built. However, since the tree is append-only, the portion visible
-    * in the view will never change.
-    *
-    * Note that, like the `view` method in `collection.mutable.Buffer`, the range is
-    * clipped to the length of the underlying buffer _at this moment_. For example,
-    * if the buffer currently has 6 elements, a `view(7,8)` is treated as `view(6,6)`
-    * and will always be empty. Therefore it is save to treat the view as immutable.
-    *
-    * @param from  the start index into the collection
-    * @param until the stop index (exclusive) into the collection
-    *
-    * @return  a view of the given range.
-    */
-  def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]]
+  //  /** Provides a view of a range of the underlying buffer. Technically, because
+  //    * the underlying buffer is mutable, this view would be subject to mutations as well until
+  //    * a copy is built. However, since the tree is append-only, the portion visible
+  //    * in the view will never change.
+  //    *
+  //    * Note that, like the `view` method in `collection.mutable.Buffer`, the range is
+  //    * clipped to the length of the underlying buffer _at this moment_. For example,
+  //    * if the buffer currently has 6 elements, a `view(7,8)` is treated as `view(6,6)`
+  //    * and will always be empty. Therefore it is save to treat the view as immutable.
+  //    *
+  //    * @param from  the start index into the collection
+  //    * @param until the stop index (exclusive) into the collection
+  //    *
+  //    * @return  a view of the given range.
+  //    */
+  //  def view(from: Int, until: Int): SeqView[A, mutable.Buffer[A]]
 
-  /** Converts this tree into another collection by copying all elements.
-    *
-    * @param cbf   the builder factory which determines the target collection type
-    * @tparam Col  the target collection type
-    * @return  a new independent collection containing all elements of this tree
-    */
-  def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+  /** Creates an iterator over the elements of this tree. */
+  def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A]
 
-  /** Helper method to export the tree to GraphViz DOT format.
-    * This is mostly for debugging or demonstration purposes and might not be
-    * particularly efficient or suitable for large trees.
-    *
-    * @param tailEdges whether to include the tail (suffix-pointer) edges or not
-    * @return  a string representation in DOT format
-    */
-  def toDOT(tailEdges: Boolean = false, sep: String = "")(implicit tx: S#Tx): String
+  //  /** Helper method to export the tree to GraphViz DOT format.
+  //    * This is mostly for debugging or demonstration purposes and might not be
+  //    * particularly efficient or suitable for large trees.
+  //    *
+  //    * @param tailEdges whether to include the tail (suffix-pointer) edges or not
+  //    * @return  a string representation in DOT format
+  //    */
+  //  def toDOT(tailEdges: Boolean = false, sep: String = "")(implicit tx: S#Tx): String
 }
