@@ -167,23 +167,18 @@ object ContextTree {
     protected def activeStopIdx : S#Var[Int]
     protected def activeSource  : S#Var[RootOrNode]
 
+    protected def corpus: mutable.Buffer[A] = ???
+
     // ---- implemented ----
 
     final protected def hyperCube: D#HyperCube = rootEdges.hyperCube
 
-    final implicit protected def pointViewTx(elem: A, tx: S#Tx): D#PointLike = pointView(elem)
+    final implicit protected def pointViewTx   (elem: A       , tx: S#Tx): D#PointLike = pointView(elem  )
     final implicit protected def entryPointView(tup: (A, Edge), tx: S#Tx): D#PointLike = pointView(tup._1)
 
-    val corpus = mutable.Buffer.empty[A]
+    // val corpus = mutable.Buffer.empty[A]
 
-    //    private var nodeCount = 1 // note: scalac crashes when this is marked `elidable`
-    //    @elidable(INFO) def nextNodeID() = {
-    //      val res = nodeCount
-    //      nodeCount += 1
-    //      res
-    //    }
-
-    protected def writeData(out: DataOutput): Unit = {
+protected def writeData(out: DataOutput): Unit = {
       rootEdges     .write(out)
       activeStartIdx.write(out)
       activeStopIdx .write(out)
@@ -223,15 +218,13 @@ object ContextTree {
     }
 
     sealed trait Position {
-      // final var source: RootOrNode = RootNode
-
-      def source: S#Var[RootOrNode]
-
-      // final var startIdx: Int = 0
-      // final var stopIdx:  Int = 0
+      // ---- abstract ----
 
       def startIdx: S#Var[Int]
       def stopIdx : S#Var[Int]
+      def source  : S#Var[RootOrNode]
+
+      // ---- implemented ----
 
       final def isExplicit(implicit tx: S#Tx)  = startIdx() >= stopIdx()
       final def span      (implicit tx: S#Tx)  = stopIdx() - startIdx()
@@ -308,8 +301,6 @@ object ContextTree {
                        val startIdx: S#Var[Int],
                        val stopIdx : S#Var[Int], exhausted: S#Var[Boolean])
       extends Position with Mutable.Impl[S] {
-
-      // private var exhausted = false // when the cursor's last position has come to the very end of the corpus
 
       def prefix = s"Cursor@${hashCode().toHexString}"
 
@@ -457,7 +448,7 @@ object ContextTree {
       }
     }
 
-    private object active extends Position /* (var node: RootOrNode, var startIdx: Int, var stopIdx: Int) */ {
+    private object active extends Position {
       def prefix = "active"
 
       def startIdx: S#Var[Int]        = activeStartIdx
@@ -496,8 +487,6 @@ object ContextTree {
       // and immutable.Set.empty is cheap compared to mutable.Set
       // ; another advantage is that we can return a view to
       // consumers of the tree without making a defensive copy
-
-      // final var edges = Map.empty[A, Edge]
 
       def edges: SkipOctree[S, D, (A, Edge)]
     }
