@@ -1,14 +1,16 @@
-def baseName = "ContextSnake"
+def baseName          = "ContextSnake"
 
-def baseNameL = baseName.toLowerCase
+def baseNameL         = baseName.toLowerCase
 
-def projectVersion = "0.1.2-SNAPSHOT"
+def projectVersion    = "0.1.2-SNAPSHOT"
 
-def baseDescription = "A library for moving around in variable length Markov chains"
+def baseDescription   = "A library for moving around in variable length Markov chains"
 
-def lucreDataVersion = "2.2.2+"
+def lucreDataVersion  = "2.2.2+"
 
-def scalaTestVersion = "2.1.2"
+def lucreSTMVersion   = "2.0.3+"
+
+def scalaTestVersion  = "2.1.2"
 
 lazy val commonSettings = Project.defaultSettings ++ Seq(
   version         := projectVersion,
@@ -76,7 +78,10 @@ lazy val txn = Project(
   settings      = subSettings ++ Seq(
     name         := s"$baseName-txn",
     description := s"$baseDescription - using transactional data structures",
-    libraryDependencies += "de.sciss" %% "lucredata-core" % lucreDataVersion
+    libraryDependencies ++= Seq(
+      "de.sciss" %% "lucredata-core" % lucreDataVersion,
+      "de.sciss" %% "lucrestm-bdb"   % lucreSTMVersion % "test"
+    )
   )
 )
 

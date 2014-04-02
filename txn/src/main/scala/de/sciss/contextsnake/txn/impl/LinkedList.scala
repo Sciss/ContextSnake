@@ -37,6 +37,28 @@ object LinkedList {
     new Impl[S, A](id, headRef)
   }
 
+  def apply[S <: Sys[S], A](elems: A*)(implicit tx: S#Tx,
+                                       elemSerializer: Serializer[S#Tx, S#Acc, A]): LinkedList[S, A] = {
+    val res = empty[S, A]
+    res.appendAll(elems)
+    res
+  }
+
+  implicit def serializer[S <: Sys[S], A](implicit elemSerializer: Serializer[S#Tx, S#Acc, A]):
+    Serializer[S#Tx, S#Acc, LinkedList[S, A]] = new Ser[S, A]
+
+  private final class Ser[S <: Sys[S], A](implicit elemSerializer: Serializer[S#Tx, S#Acc, A])
+    extends Serializer[S#Tx, S#Acc, LinkedList[S, A]] {
+
+    def read(in: DataInput, access: S#Acc)(implicit tx: S#Tx): LinkedList[S, A] = {
+      val id      = tx.readID(in, access)
+      val headRef = tx.readVar[Option[Cell[S, A]]](id, in)
+      new Impl[S, A](id, headRef)
+    }
+
+    def write(ll: LinkedList[S, A], out: DataOutput): Unit = ll.write(out)
+  }
+
   def read[S <: Sys[S], A](in: DataInput, access: S#Acc)
                           (implicit tx: S#Tx, elemSerializer: Serializer[S#Tx, S#Acc, A]): LinkedList[S, A] = {
     val id = tx.readID(in, access)
@@ -124,6 +146,8 @@ object LinkedList {
 
       step(idx, headRef)
     }
+
+    def headOption(implicit tx: S#Tx): Option[A] = headRef().map(_.value)
 
     def trimStart(n: Int)(implicit tx: S#Tx): Unit = {
       if (n < 0) throw new IndexOutOfBoundsException(n.toString)
@@ -230,7 +254,7 @@ trait LinkedList[S <: Sys[S], A] extends Mutable[S#ID, S#Tx] {
 
   def appendAll(xs: TraversableOnce[A])(implicit tx: S#Tx): Unit
 
-  // def foreach(fun: A => Unit)(implicit tx: S#Tx): Unit
+  def headOption(implicit tx: S#Tx): Option[A]
 
   def isEmpty (implicit tx: S#Tx): Boolean
   def nonEmpty(implicit tx: S#Tx): Boolean
