@@ -106,14 +106,15 @@ object LinkedList {
       step(headRef)
     }
 
-    def remove(elem: A)(implicit tx: S#Tx): Unit = {
-      @tailrec def step(v: S#Var[Option[Cell[S, A]]]): Unit =
+    def remove(elem: A)(implicit tx: S#Tx): Boolean = {
+      @tailrec def step(v: S#Var[Option[Cell[S, A]]]): Boolean =
         v() match {
-          case None =>
+          case None => false
           case Some(cell) =>
             if (cell.value == elem) {
               v() = cell.nextRef()
               cell.dispose()
+              true
 
             } else step(cell.nextRef)
         }
@@ -248,7 +249,7 @@ object LinkedList {
 trait LinkedList[S <: Sys[S], A] extends Mutable[S#ID, S#Tx] {
   def prepend(elem: A)(implicit tx: S#Tx): Unit
   def append (elem: A)(implicit tx: S#Tx): Unit
-  def remove (elem: A)(implicit tx: S#Tx): Unit
+  def remove (elem: A)(implicit tx: S#Tx): Boolean
 
   def apply(idx: Int)(implicit tx: S#Tx): A
 
