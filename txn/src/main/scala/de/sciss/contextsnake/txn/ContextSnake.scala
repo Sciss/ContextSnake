@@ -33,6 +33,7 @@ import de.sciss.lucre.geom.{QueryShape, Space}
 import language.higherKinds
 import de.sciss.lucre.data
 import de.sciss.serial.{Writable, DataInput, DataOutput, Serializer}
+import impl.{DoubleLinkedList => LL}
 
 object ContextTree {
   /** Creates a new empty context tree for a given element type.
@@ -55,7 +56,7 @@ object ContextTree {
 
       val activeSource  : S#Var[RootOrNode] = tx.newVar(id, RootNode: RootOrNode)(RootOrNodeSerializer)
 
-      val corpus = impl.LinkedList.empty[S, A]
+      val corpus = LL.empty[S, A]
     }
   }
 
@@ -167,7 +168,7 @@ object ContextTree {
     protected def activeStopIdx : S#Var[Int]
     protected def activeSource  : S#Var[RootOrNode]
 
-    protected def corpus: impl.LinkedList[S, A]
+    protected def corpus: LL[S, A]
 
     // ---- implemented ----
 
@@ -390,7 +391,7 @@ object ContextTree {
         } else successors
     }
 
-    private final class SnakeImpl(body: impl.LinkedList[S, A], c: Cursor) extends Snake[S, D, A] {
+    private final class SnakeImpl(body: LL[S, A], c: Cursor) extends Snake[S, D, A] {
       override def toString = s"ContextTree.Snake@${hashCode().toHexString}"
 
       def size    (implicit tx: S#Tx): Int     = body.size
@@ -614,7 +615,7 @@ object ContextTree {
     }
 
     def snake(init: TraversableOnce[A])(implicit tx: S#Tx): Snake[S, D, A] = {
-      val body    = impl.LinkedList.empty[S, A]
+      val body    = LL.empty[S, A]
       body.appendAll(init)
       val c       = mkCursor()
       if (!init.forall(c.tryMove)) throw new NoSuchElementException(init.toString)
