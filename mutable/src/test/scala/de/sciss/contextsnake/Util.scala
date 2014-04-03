@@ -1,13 +1,14 @@
 package de.sciss.contextsnake
 
 import annotation.{elidable, tailrec}
+import scala.collection.immutable.{IndexedSeq => Vec}
 
 object Util {
   def expandWhileChoice[A](s: ContextTree.Snake[A], minChoice: Int = 2, maxLength: Int = 1000)
-                          (implicit random: util.Random): Vector[A] = {
+                          (implicit random: util.Random, ord: Ordering[A]): Vec[A] = {
     @tailrec def loop(i: Int): Unit = {
       if (i == maxLength) return
-      val sq  = s.successors.to[Vector]
+      val sq  = s.successors.toIndexedSeq.sorted
       val sz  = sq.size
       if (sz < minChoice) return
       val idx = (random.nextDouble() * sz).toInt
@@ -15,11 +16,11 @@ object Util {
       loop(i + 1)
     }
     loop(0)
-    s.to[Vector]
+    s.iterator.toIndexedSeq
   }
 
   def produce[A](t: ContextTree[A], len: Int = 100, maxSingleChoice: Int = 2)
-                (init: TraversableOnce[A])(implicit random: util.Random): Vector[A] = {
+                (init: TraversableOnce[A])(implicit random: util.Random, ord: Ordering[A]): Vec[A] = {
     val s = t.snake(init)
     val b = Vector.newBuilder[A]
     b.sizeHint(len)
@@ -27,7 +28,7 @@ object Util {
     var singleChoice = 0
     init.foreach { e => b += e; off += 1 }
     while (off < len && s.nonEmpty) {
-      val sq = s.successors.to[Vector]
+      val sq = s.successors.toIndexedSeq.sorted
       val sz = sq.size
       if (sz == 0 || sz == 1 && singleChoice == maxSingleChoice) {
         s.trimStart(1)

@@ -127,6 +127,8 @@ object ContextTree {
       * @return  the copied collection
       */
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A]
+
+    def iterator: Iterator[A]
   }
 
   @elidable(INFO) private final val DEBUG = false
@@ -310,6 +312,9 @@ object ContextTree {
       def successors: Iterator[A] = c.successors
 
       def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A]]): Col[A] = body.to[Col]
+
+      def iterator: Iterator[A] = body.iterator
+
       def apply(idx: Int): A = body(idx)
 
       def trimEnd(n: Int): Unit = {

@@ -6,10 +6,10 @@ import scala.collection.immutable.{IndexedSeq => Vec}
 
 object Util {
   def expandWhileChoice[S <: Sys[S], A](s: ContextTree.Snake[S, A], minChoice: Int = 2, maxLength: Int = 1000)
-                          (implicit tx: S#Tx, random: TxnRandom[S#Tx]): Vec[A] = {
+                          (implicit tx: S#Tx, random: TxnRandom[S#Tx], ord: Ordering[A]): Vec[A] = {
     @tailrec def loop(i: Int): Unit = {
       if (i == maxLength) return
-      val sq  = s.successors.toIndexedSeq
+      val sq  = s.successors.toIndexedSeq.sorted
       val sz  = sq.size
       if (sz < minChoice) return
       val idx = (random.nextDouble() * sz).toInt
@@ -21,7 +21,7 @@ object Util {
   }
 
   def produce[S <: Sys[S], A](t: ContextTree[S, A], len: Int = 100, maxSingleChoice: Int = 2)
-                (init: TraversableOnce[A])(implicit tx: S#Tx, random: TxnRandom[S#Tx]): Vec[A] = {
+                (init: TraversableOnce[A])(implicit tx: S#Tx, random: TxnRandom[S#Tx], ord: Ordering[A]): Vec[A] = {
     val s = t.snake(init)
     val b = Vector.newBuilder[A]
     b.sizeHint(len)
@@ -29,7 +29,7 @@ object Util {
     var singleChoice = 0
     init.foreach { e => b += e; off += 1 }
     while (off < len && s.nonEmpty) {
-      val sq = s.successors.toIndexedSeq
+      val sq = s.successors.toIndexedSeq.sorted
       val sz = sq.size
       if (sz == 0 || sz == 1 && singleChoice == maxSingleChoice) {
         s.trimStart(1)
