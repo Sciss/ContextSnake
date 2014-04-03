@@ -43,10 +43,11 @@ object ContextTree {
   def empty[S <: Sys[S], D <: Space[D], A](hyperCube: D#HyperCube)
                                           (implicit tx: S#Tx, pointView: A => D#PointLike, space: D,
                                            elemSerializer: Serializer[S#Tx, S#Acc, A]): ContextTree[S, A] = {
+    val hyperCube0 = hyperCube
     new Impl[S, D, A] {
       val id: S#ID = tx.newID()
 
-      val rootEdges = SkipOctree.empty[S, D, (A, Edge)](hyperCube)(
+      val rootEdges = SkipOctree.empty[S, D, (A, Edge)](hyperCube0)(
         tx, entryPointView, space, EntrySerializer)
 
       val activeStartIdx: S#Var[Int] = tx.newVar(id, 0)
