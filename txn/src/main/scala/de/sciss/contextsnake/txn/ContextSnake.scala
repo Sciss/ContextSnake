@@ -182,6 +182,9 @@ object ContextTree {
     def apply(idx: Int)(implicit tx: S#Tx): A
 
     def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A]
+
+    /** For debugging. */
+    def CLEAR()(implicit tx: S#Tx): Unit
   }
 
   @elidable(INFO) private final val DEBUG = false
@@ -349,6 +352,12 @@ object ContextTree {
         found
       }
 
+      def CLEAR()(implicit tx: S#Tx): Unit = {
+        startIdx() = 0
+        stopIdx () = 0
+        source()   = RootNode
+      }
+
       // sets the `exhausted` flag which is used in `tryMove` and `successors`
       def reachedLeaf()(implicit tx: S#Tx): Unit =
         exhausted() = true
@@ -426,6 +435,11 @@ object ContextTree {
     private final class SnakeImpl(body: LL[S, A], c: Cursor) extends Snake[S, D, A] {
       override def toString = s"ContextTree.Snake@${hashCode().toHexString}"
 
+      def CLEAR()(implicit tx: S#Tx): Unit = {
+        c.CLEAR()
+        body.clear()
+      }
+
       def size    (implicit tx: S#Tx): Int     = body.size
       def length  (implicit tx: S#Tx): Int     = body.size
       def isEmpty (implicit tx: S#Tx): Boolean = body.isEmpty
@@ -462,7 +476,7 @@ object ContextTree {
         body.trimStart(n)
       }
 
-      def appendAll(xs: TraversableOnce[A])(implicit tx: S#Tx): Unit = xs.foreach(add1)
+      def appendAll(xs: TraversableOnce[A])(implicit tx: S#Tx): Unit = xs.foreach(snakeAdd1)
 
       def append(elems: A*)(implicit tx: S#Tx): Unit = appendAll(elems)
 

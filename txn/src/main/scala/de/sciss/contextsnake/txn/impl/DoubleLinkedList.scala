@@ -356,4 +356,6 @@ trait DoubleLinkedList[S <: Sys[S], A] extends Mutable[S#ID, S#Tx] {
 
   def removeHead()(implicit tx: S#Tx): A
   def removeLast()(implicit tx: S#Tx): A
+
+  def clear()(implicit tx: S#Tx): Unit
 }

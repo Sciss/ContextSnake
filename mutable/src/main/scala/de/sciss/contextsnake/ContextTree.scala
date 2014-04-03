@@ -337,7 +337,7 @@ object ContextTree {
         body.trimStart(n)
       }
 
-      def appendAll(xs: TraversableOnce[A]): Unit = xs.foreach(add1)
+      def appendAll(xs: TraversableOnce[A]): Unit = xs.foreach(snakeAdd1)
 
       def append(elems: A*): Unit = appendAll(elems)
 

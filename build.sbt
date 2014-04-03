@@ -14,6 +14,8 @@ def kollFlitzVersion  = "0.1.+"
 
 def numbersVersion    = "0.1.+"
 
+def swingPlusVersion  = "0.1.1+"
+
 def scalaTestVersion  = "2.1.2"
 
 lazy val commonSettings = Project.defaultSettings ++ Seq(
@@ -86,7 +88,8 @@ lazy val txn = Project(
       "de.sciss" %% "lucredata-core" % lucreDataVersion,
       "de.sciss" %% "lucrestm-bdb"   % lucreSTMVersion  % "test",
       "de.sciss" %% "kollflitz"      % kollFlitzVersion % "test",
-      "de.sciss" %% "numbers"        % numbersVersion   % "test"
+      "de.sciss" %% "numbers"        % numbersVersion   % "test",
+      "de.sciss" %% "swingplus"      % swingPlusVersion % "test"
     ),
     libraryDependencies += { val sv = scalaVersion.value
       val swing = if (sv startsWith "2.10")
