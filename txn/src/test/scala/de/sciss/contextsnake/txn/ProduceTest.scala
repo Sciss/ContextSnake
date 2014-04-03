@@ -73,7 +73,7 @@ object ProduceTest extends App {
   val res = system.step { implicit tx =>
     val hyperCube   = IntSquare(128, 128, 128)
     implicit def charView(c: Char): IntPoint2D = IntPoint2D(c.toInt, 128)
-    val c           = ContextTree[S, D, A](txt.toUpperCase: _*)(hyperCube)
+    val c           = ContextTree[S, D, A](hyperCube)(txt.toUpperCase: _*)
     val rID         = tx.newID()
     implicit val r  = TxnRandom[S](rID, 5678L)
     Util.produce[S, D, A](c, 200, 4)("M").mkString

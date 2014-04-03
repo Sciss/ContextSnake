@@ -28,6 +28,8 @@ package de.sciss.contextsnake.txn
 import concurrent.stm.{Ref, InTxn}
 import java.util.concurrent.atomic.AtomicLong
 import de.sciss.lucre.stm
+import de.sciss.lucre.stm.{InMemory, Disposable, Sys, Mutable}
+import de.sciss.serial.{DataInput, Serializer, DataOutput}
 
 /** Like java's random, but within a transactional cell. */
 object TxnRandom {
@@ -59,9 +61,28 @@ object TxnRandom {
     apply(id, calcSeedUniquifier() ^ System.nanoTime())
 
   def apply[S <: stm.Sys[S]](id: S#ID, seed: Long)(implicit tx: S#Tx): TxnRandom[S#Tx] =
-    new SysImpl[S#Tx](tx.newLongVar(id, initialScramble(seed)))
+    new SimpleSysImpl[S#Tx](tx.newLongVar(id, initialScramble(seed)))
 
-  def wrap[Txn](peer: stm.Var[Txn, Long]): TxnRandom[Txn] = new SysImpl[Txn](peer)
+  def apply[S <: stm.Sys[S]](seed: Long)(implicit tx: S#Tx): Writable[S] = {
+    val id = tx.newID()
+    new FullSysImpl[S](id, tx.newLongVar(id, initialScramble(seed)))
+  }
+
+  def wrap[Txn](peer: stm.Var[Txn, Long]): TxnRandom[Txn] = new SimpleSysImpl[Txn](peer)
+
+  implicit def serializer[S <: Sys[S]]: Serializer[S#Tx, S#Acc, Writable[S]] = anySer.asInstanceOf[Ser[S]]
+
+  private val anySer = new Ser[InMemory]
+
+  private final class Ser[S <: Sys[S]] extends Serializer[S#Tx, S#Acc, Writable[S]] {
+    def read(in: DataInput, access: S#Acc)(implicit tx: S#Tx): Writable[S] = {
+      val id      = tx.readID(in, access)
+      val seedRef = tx.readLongVar(id, in)
+      new FullSysImpl[S](id, seedRef)
+    }
+
+    def write(rnd: Writable[S], out: DataOutput): Unit = rnd.write(out)
+  }
 
   private sealed trait Impl[Txn] extends TxnRandom[Txn] {
     protected def refSet(seed: Long)(implicit tx: Txn): Unit
@@ -109,16 +130,34 @@ object TxnRandom {
     protected def refSet(value: Long)(implicit tx: InTxn): Unit = seedRef() = value
 
     protected def refGet(implicit tx: InTxn): Long = seedRef()
+
+    def dispose()(implicit tx: InTxn): Unit = ()
   }
 
-  private final class SysImpl[Txn](seedRef: stm.Var[Txn, Long]) extends Impl[Txn] {
-    protected def refSet(value: Long)(implicit tx: Txn): Unit = seedRef() = value
+  private abstract class SysImpl[Txn] extends Impl[Txn] {
+    protected def seedRef: stm.Var[Txn, Long]
 
-    protected def refGet(implicit tx: Txn): Long = seedRef()
+    final protected def refSet(value: Long)(implicit tx: Txn): Unit = seedRef() = value
+
+    final protected def refGet(implicit tx: Txn): Long = seedRef()
   }
+
+  private final class SimpleSysImpl[Txn](protected val seedRef: stm.Var[Txn, Long]) extends SysImpl[Txn] {
+    def dispose()(implicit tx: Txn): Unit = seedRef.dispose()
+  }
+
+  private final class FullSysImpl[S <: Sys[S]](val id: S#ID, protected val seedRef: stm.Var[S#Tx, Long])
+    extends SysImpl[S#Tx] with Writable[S] with Mutable.Impl[S] {
+
+    protected def writeData(out: DataOutput): Unit = seedRef.write(out)
+
+    protected def disposeData()(implicit tx: S#Tx): Unit = seedRef.dispose()
+  }
+
+  trait Writable[S <: Sys[S]] extends TxnRandom[S#Tx] with Mutable[S#ID, S#Tx]
 }
 
-trait TxnRandom[-Txn] {
+trait TxnRandom[-Txn] extends Disposable[Txn] {
   def nextBoolean  ()(implicit tx: Txn): Boolean
   def nextDouble   ()(implicit tx: Txn): Double
   def nextFloat    ()(implicit tx: Txn): Float

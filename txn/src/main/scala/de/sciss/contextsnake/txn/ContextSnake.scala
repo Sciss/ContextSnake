@@ -65,12 +65,32 @@ object ContextTree {
     * @param elem  the elements to add in their original order
     * @tparam A    the element type
     */
-  def apply[S <: Sys[S], D <: Space[D], A](elem: A*)(hyperCube: D#HyperCube)
+  def apply[S <: Sys[S], D <: Space[D], A](hyperCube: D#HyperCube)(elem: A*)
                                           (implicit tx: S#Tx, pointView: A => D#PointLike, space: D,
                                            elemSerializer: Serializer[S#Tx, S#Acc, A]): ContextTree[S, D, A] = {
     val res = empty[S, D, A](hyperCube)
     res.appendAll(elem)
     res
+  }
+
+  implicit def serializer[S <: Sys[S], D <: Space[D], A](implicit pointView: A => D#PointLike, space: D,
+                                                         elemSerializer: Serializer[S#Tx, S#Acc, A]):
+    Serializer[S#Tx, S#Acc, ContextTree[S, D, A]] = new Ser[S, D, A]
+
+  private final class Ser[S <: Sys[S], D <: Space[D], A](implicit pointView: A => D#PointLike, space: D,
+                                                         elemSerializer: Serializer[S#Tx, S#Acc, A])
+    extends Serializer[S#Tx, S#Acc, ContextTree[S, D, A]] {
+
+    def read(in: DataInput, access: S#Acc)(implicit tx: S#Tx): ContextTree[S, D, A] = new Impl[S, D, A] {
+      val id              = tx.readID(in, access)
+      val rootEdges       = SkipOctree.read[S, D, (A, Edge)](in, access)
+      val activeStartIdx  = tx.readIntVar(id, in)
+      val activeStopIdx   = tx.readIntVar(id, in)
+      val activeSource    = tx.readVar[RootOrNode](id, in)
+      val corpus          = LL.read[S, A](in, access)
+    }
+
+    def write(tree: ContextTree[S, D, A], out: DataOutput): Unit = tree.write(out)
   }
 
   /** A common trait to the suffix tree and navigating snakes.
@@ -95,6 +115,17 @@ object ContextTree {
     def iterator(implicit tx: S#Tx): data.Iterator[S#Tx, A]
   }
 
+  object Snake {
+    implicit def serializer[S <: Sys[S], D <: Space[D], A](implicit pointView: A => D#PointLike, space: D,
+                                                           elemSerializer: Serializer[S#Tx, S#Acc, A]):
+      Serializer[S#Tx, S#Acc, Snake[S, D, A]] = new Ser[S, D, A]
+
+    private final class Ser[S <: Sys[S], D <: Space[D], A] extends Serializer[S#Tx, S#Acc, Snake[S, D, A]] {
+      def read(in: DataInput, access: S#Acc)(implicit tx: S#Tx): Snake[S, D, A] = ???
+
+      def write(v: Snake[S, D, A], out: DataOutput): Unit = ???
+    }
+  }
   /** A `Snake` represents a sliding window over a context tree's corpus. */
   trait Snake[S <: Sys[S], D <: Space[D], A] extends Like[S, A] {
     /** The size of the snake. Same as `length`. */
@@ -163,12 +194,11 @@ object ContextTree {
 
     // ---- abstract ----
 
-    protected def rootEdges: SkipOctree[S, D, (A, Edge)]
+    protected def rootEdges     : SkipOctree[S, D, (A, Edge)]
     protected def activeStartIdx: S#Var[Int]
     protected def activeStopIdx : S#Var[Int]
     protected def activeSource  : S#Var[RootOrNode]
-
-    protected def corpus: LL[S, A]
+    protected def corpus        : LL[S, A]
 
     // ---- implemented ----
 
@@ -182,6 +212,7 @@ object ContextTree {
       activeStartIdx.write(out)
       activeStopIdx .write(out)
       activeSource  .write(out)
+      corpus        .write(out)
     }
 
     protected def disposeData()(implicit tx: S#Tx): Unit = {
@@ -189,6 +220,7 @@ object ContextTree {
       activeStartIdx.dispose()
       activeStopIdx .dispose()
       activeSource  .dispose()
+      corpus        .dispose()
     }
 
     implicit protected object EntrySerializer extends Serializer[S#Tx, S#Acc, (A, Edge)] {
