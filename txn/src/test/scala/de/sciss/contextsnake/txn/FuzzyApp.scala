@@ -9,13 +9,16 @@ import java.awt.geom.GeneralPath
 import java.awt.Color
 import scala.swing.event.{MouseDragged, MouseReleased, MousePressed}
 import scala.concurrent.{ExecutionContext, Future, blocking}
-import de.sciss.lucre.geom.{IntPoint2D, IntSpace, IntSquare}
+import de.sciss.lucre.geom.{IntRectangle, IntPoint2D, IntSpace, IntSquare}
 import de.sciss.kollflitz
 import de.sciss.lucre.stm
 import de.sciss.numbers.Implicits._
 import ExecutionContext.Implicits.global
 import de.sciss.swingplus.Spinner
 import javax.swing.SpinnerNumberModel
+import de.sciss.lucre.data.SkipOctree
+import scala.annotation.tailrec
+import de.sciss.serial.{DataInput, DataOutput, Serializer}
 
 object FuzzyApp extends SimpleSwingApplication {
   type S = InMemory
@@ -82,6 +85,67 @@ object FuzzyApp extends SimpleSwingApplication {
       g.setColor(Color.black)
       g.draw(gp)
     }
+  }
+
+  def produceFuzzy(tree: ContextTree[S, D, Move], corpus: SkipOctree[S, D, Move], body0: Vec[Move],
+                   singleChoice0: Int, maxSingleChoice: Int = 2, fuzzyAmount: Int = 1)
+             (implicit tx: S#Tx, random: TxnRandom[S#Tx]): (Int, Option[Vec[Move]]) = {
+    var singleChoice = singleChoice0
+
+    def mkFuzzy(in: Vec[Move]): Vec[IntRectangle] = {
+      val si = in.size
+      Vec.tabulate(si) { i =>
+        val f   = (sz - (i + 1)) * fuzzyAmount
+        val m   = in(i)
+        val ext = 2 * f + 1
+        IntRectangle(m.x - f, m.y - f, ext, ext)
+      }
+    }
+
+    def collect1(in: Vec[Move], range: IntRectangle): Vec[Vec[Move]] = {
+      val succ = tree.snake(in).successorsRange(range)
+      succ.map(in :+ _).toIndexedSeq
+    }
+
+    @tailrec def collect(res: Vec[Vec[Move]], in: Vec[IntRectangle]): Vec[Vec[Move]] = in match {
+      case head +: tail =>
+        val newBodies = res.flatMap { body =>
+          collect1(body, head)
+        }
+        collect(newBodies, tail)
+
+      case _ => res
+    }
+
+    var snake = body0
+
+    while (snake.nonEmpty) {
+      val fuzzy = mkFuzzy(snake)
+      val heads = corpus.rangeQuery(fuzzy.head).toIndexedSeq
+      val sq    = collect(Vec(heads), fuzzy.tail)
+      val sz  = sq.size
+      val ssz = snake.size
+      if (DEBUG) println(s"Snake size = $ssz, succ size = $sz, singleChoice = $singleChoice")
+      if (ssz > 1 && (sz == 0 || sz == 1 && singleChoice >= maxSingleChoice)) {
+        snake = snake.tail
+        if (DEBUG) println("...trim start")
+      } else {
+        val elem = if (sz == 1) {
+          if (DEBUG) println("...head")
+          singleChoice += 1
+          sq.head
+        } else {
+          if (DEBUG) println(s"...rnd($sz)")
+          singleChoice = 0
+          val idx = (random.nextDouble() * sz).toInt
+          sq(idx)
+        }
+        // this might be a problem: mkFuzzy will be applied to something that was already shifted
+        // snake /* :+ */ = elem
+        return (singleChoice, Some(elem))
+      }
+    }
+    (singleChoice, None)
   }
 
   def produce(snake: ContextTree.Snake[S, D, Move], singleChoice0: Int, maxSingleChoice: Int = 2)
@@ -153,7 +217,10 @@ object FuzzyApp extends SimpleSwingApplication {
     @volatile var animCnt = 0
 
     val singleModel = new SpinnerNumberModel(2, 2, 256, 1)
-    val ggSingle = new Spinner(singleModel)
+    val ggSingle    = new Spinner(singleModel)
+
+    val fuzzyModel  = new SpinnerNumberModel(0, 0, 64, 1)
+    val ggFuzzy     = new Spinner(fuzzyModel)
 
     ggGen.listenTo(ggGen.mouse.clicks)
     ggGen.reactions += {
@@ -171,7 +238,7 @@ object FuzzyApp extends SimpleSwingApplication {
               val _snake  = ctx.snake(move1 :: Nil)
               val snakeH  = tx.newHandle(_snake)
               val rndH    = tx.newHandle(rnd)
-              Some((move1, snakeH, rndH))
+              Some((move1, snakeH, rndH, ctxH))
             } else None
           }
         }
@@ -181,7 +248,7 @@ object FuzzyApp extends SimpleSwingApplication {
         // anim = hOpt.map { case (m0, snakeH, rndH) => (snakeH, rndH) }
 
         hOpt.foreach {
-          case (m0, snakeH, rndH) =>
+          case (m0, snakeH, rndH, ctxH) =>
             val p0 = point(pt.x, pt.y)
             val p1 = point(p0.x + m0.x, p0.y + m0.y)
             ggGen.append(p0)
@@ -189,15 +256,58 @@ object FuzzyApp extends SimpleSwingApplication {
 
             val animCnt0 = animCnt
 
+            val fuzzyAmt  = fuzzyModel.getNumber.intValue()
+            val useFuzzy  = fuzzyAmt > 0
+
             Future {
               blocking {
                 var singleChoice = 0
+
+                var corpusH: stm.Source[S#Tx, SkipOctree[S, D, Move]] = null
+                var body1: Vec[Move] = null
+
                 while (animCnt == animCnt0) {
                   val t0 = System.currentTimeMillis()
-                  val (_s, moveOpt) = system.step { implicit tx =>
-                    val snake = snakeH()
-                    implicit val rnd = rndH()
-                    produce(snake, singleChoice0 = singleChoice, maxSingleChoice = singleMax)
+                  val (_s, moveOpt) = if (useFuzzy) {
+                    val (__s, _bodyOutOpt) = system.step { implicit tx =>
+                      implicit val rnd = rndH()
+                      val ctx = ctxH()
+                      val corpus = if (corpusH == null) {
+                        implicit def viewMove(m: Move, tx: S#Tx): D#PointLike = m
+                        val oct = SkipOctree.empty[S, D, Move](dataCube)
+                        ctx.iterator.foreach { move =>
+                          oct += move
+                        }
+                        implicit val octSer = new Serializer[S#Tx, S#Acc, SkipOctree[S, D, Move]] {
+                          def read(in: DataInput, access: S#Acc)(implicit tx: S#Tx): SkipOctree[S, D, Move] =
+                            SkipOctree.read[S, D, Move](in, access)
+
+                          def write(v: SkipOctree[S, D, Move], out: DataOutput): Unit = v.write(out)
+                        }
+                        corpusH = tx.newHandle(oct)
+                        oct
+
+                      } else {
+                        corpusH()
+                      }
+
+                      val body = if (body1 == null) {
+                        snakeH().iterator.toIndexedSeq
+
+                      } else body1
+
+                      produceFuzzy(ctx, corpus = corpus, body0 = body, singleChoice0 = singleChoice,
+                        maxSingleChoice = singleMax, fuzzyAmount = fuzzyAmt)
+                    }
+                    _bodyOutOpt.foreach(b => body1 = b)
+                    (__s, _bodyOutOpt.map(_.last))
+
+                  } else {
+                    system.step { implicit tx =>
+                      val snake = snakeH()
+                      implicit val rnd = rndH()
+                      produce(snake, singleChoice0 = singleChoice, maxSingleChoice = singleMax)
+                    }
                   }
                   singleChoice = _s
                   // println(moveOpt)
@@ -279,6 +389,9 @@ object FuzzyApp extends SimpleSwingApplication {
             contents += Swing.HStrut(8)
             contents += new Label("Max Single:")
             contents += ggSingle
+            contents += Swing.HStrut(8)
+            contents += new Label("Fuzziness:")
+            contents += ggFuzzy
             contents += Swing.HGlue
           }
         }

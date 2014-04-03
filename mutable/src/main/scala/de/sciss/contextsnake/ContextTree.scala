@@ -29,6 +29,7 @@ import collection.{SeqView, mutable}
 import annotation.{elidable, tailrec}
 import elidable.INFO
 import collection.generic.CanBuildFrom
+import language.higherKinds
 
 object ContextTree {
   /** Creates a new empty context tree for a given element type.
