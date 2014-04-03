@@ -32,6 +32,21 @@ object Util {
     init.foreach { e => b += e; off += 1 }
     while (off < len && s.nonEmpty) {
       val sq = s.successors.toIndexedSeq.sorted
+
+      //      locally {
+      //        import de.sciss.lucre.geom.{QueryShape, IntRectangle}
+      //        if (s.nonEmpty) {
+      //          val e     = s.apply(s.length - 1)
+      //          val c     = e.asInstanceOf[Char].toInt
+      //          val shape = IntRectangle(c - 4, 0, 8, 256)
+      //          // s.trimEnd(1)
+      //          val test = s.successorsRange(shape.asInstanceOf[QueryShape[_, D]]).toIndexedSeq.sorted
+      //          // s += e  // restore
+      //          println(s"-- point successors: ${sq  .mkString(", ")}")
+      //          println(s"-- range successors: ${test.mkString(", ")}")
+      //        }
+      //      }
+
       val sz = sq.size
       if (sz == 0 || sz == 1 && singleChoice == maxSingleChoice) {
         s.trimStart(1)
