@@ -3,9 +3,11 @@ package de.sciss.contextsnake.txn
 import annotation.{elidable, tailrec}
 import de.sciss.lucre.stm.Sys
 import scala.collection.immutable.{IndexedSeq => Vec}
+import de.sciss.lucre.geom.Space
 
 object Util {
-  def expandWhileChoice[S <: Sys[S], A](s: ContextTree.Snake[S, A], minChoice: Int = 2, maxLength: Int = 1000)
+  def expandWhileChoice[S <: Sys[S], D <: Space[D], A](s: ContextTree.Snake[S, D, A], minChoice: Int = 2,
+                                                       maxLength: Int = 1000)
                           (implicit tx: S#Tx, random: TxnRandom[S#Tx], ord: Ordering[A]): Vec[A] = {
     @tailrec def loop(i: Int): Unit = {
       if (i == maxLength) return
@@ -20,7 +22,7 @@ object Util {
     s.iterator.toIndexedSeq
   }
 
-  def produce[S <: Sys[S], A](t: ContextTree[S, A], len: Int = 100, maxSingleChoice: Int = 2)
+  def produce[S <: Sys[S], D <: Space[D], A](t: ContextTree[S, D, A], len: Int = 100, maxSingleChoice: Int = 2)
                 (init: TraversableOnce[A])(implicit tx: S#Tx, random: TxnRandom[S#Tx], ord: Ordering[A]): Vec[A] = {
     val s = t.snake(init)
     val b = Vector.newBuilder[A]

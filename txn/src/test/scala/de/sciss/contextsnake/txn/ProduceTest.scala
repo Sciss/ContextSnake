@@ -2,7 +2,7 @@ package de.sciss.contextsnake.txn
 
 import de.sciss.lucre.stm.Durable
 import de.sciss.lucre.stm.store.BerkeleyDB
-import de.sciss.lucre.geom.{IntPoint2D, IntSquare, Space}
+import de.sciss.lucre.geom.{IntPoint2D, IntSquare}
 import de.sciss.lucre.geom.IntSpace.TwoDim
 import language.implicitConversions
 
@@ -76,7 +76,7 @@ object ProduceTest extends App {
     val c           = ContextTree[S, D, A](txt.toUpperCase: _*)(hyperCube)
     val rID         = tx.newID()
     implicit val r  = TxnRandom[S](rID, 5678L)
-    Util.produce[S, A](c, 200, 4)("M").mkString
+    Util.produce[S, D, A](c, 200, 4)("M").mkString
   }
   println(res)
 
