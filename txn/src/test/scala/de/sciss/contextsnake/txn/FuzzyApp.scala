@@ -95,7 +95,7 @@ object FuzzyApp extends SimpleSwingApplication {
     def mkFuzzy(in: Vec[Move]): Vec[IntRectangle] = {
       val si = in.size
       Vec.tabulate(si) { i =>
-        val f   = (sz - (i + 1)) * fuzzyAmount
+        val f   = ((si - (i + 1)) * fuzzyAmount).min(sz)
         val m   = in(i)
         val ext = 2 * f + 1
         IntRectangle(m.x - f, m.y - f, ext, ext)
@@ -107,6 +107,11 @@ object FuzzyApp extends SimpleSwingApplication {
       succ.map(in :+ _).toIndexedSeq
     }
 
+    def collect2(in: Vec[Move]): Vec[Vec[Move]] = {
+      val succ = tree.snake(in).successors
+      succ.map(in :+ _).toIndexedSeq
+    }
+
     @tailrec def collect(res: Vec[Vec[Move]], in: Vec[IntRectangle]): Vec[Vec[Move]] = in match {
       case head +: tail =>
         val newBodies = res.flatMap { body =>
@@ -114,17 +119,21 @@ object FuzzyApp extends SimpleSwingApplication {
         }
         collect(newBodies, tail)
 
-      case _ => res
+      case _ =>
+        res.flatMap { body =>
+          collect2(body)
+        }
     }
 
     var snake = body0
 
     while (snake.nonEmpty) {
-      val fuzzy = mkFuzzy(snake)
-      val heads = corpus.rangeQuery(fuzzy.head).toIndexedSeq
-      val sq    = collect(Vec(heads), fuzzy.tail)
-      val sz  = sq.size
-      val ssz = snake.size
+      val fuzzy   = mkFuzzy(snake)
+      val heads   = corpus.rangeQuery(fuzzy.head).toIndexedSeq
+      val headsB  = heads.map(Vec(_))
+      val sq      = collect(headsB, fuzzy.tail)
+      val sz      = sq.size
+      val ssz     = snake.size
       if (DEBUG) println(s"Snake size = $ssz, succ size = $sz, singleChoice = $singleChoice")
       if (ssz > 1 && (sz == 0 || sz == 1 && singleChoice >= maxSingleChoice)) {
         snake = snake.tail
@@ -296,6 +305,8 @@ object FuzzyApp extends SimpleSwingApplication {
 
                       } else body1
 
+                      println(s"Body size = ${body.size}; singleChoice = $singleChoice")
+
                       produceFuzzy(ctx, corpus = corpus, body0 = body, singleChoice0 = singleChoice,
                         maxSingleChoice = singleMax, fuzzyAmount = fuzzyAmt)
                     }
@@ -342,7 +353,7 @@ object FuzzyApp extends SimpleSwingApplication {
     lazy val ggCorpus: Button = Button("Train") {
       val pts = ggTrain.points
       import kollflitz.Ops._
-      val moves = pts.pairMap((pred, succ) => Move(succ.x - pred.x, succ.y - pred.y))
+      val moves = pts.mapPairs((pred, succ) => Move(succ.x - pred.x, succ.y - pred.y))
 
       ctxHFut = Future {
         blocking {

@@ -2,27 +2,27 @@ def baseName          = "ContextSnake"
 
 def baseNameL         = baseName.toLowerCase
 
-def projectVersion    = "0.1.2-SNAPSHOT"
+def projectVersion    = "0.2.0-SNAPSHOT"
 
 def baseDescription   = "A library for moving around in variable length Markov chains"
 
-def lucreDataVersion  = "2.2.2+"
+def lucreDataVersion  = "2.2.3"
 
-def lucreSTMVersion   = "2.0.3+"
+def lucreSTMVersion   = "2.0.4"
 
-def kollFlitzVersion  = "0.1.+"
+def kollFlitzVersion  = "0.2.0"
 
-def numbersVersion    = "0.1.+"
+def numbersVersion    = "0.1.1"
 
-def swingPlusVersion  = "0.1.1+"
+def swingPlusVersion  = "0.1.2"
 
-def scalaTestVersion  = "2.1.2"
+def scalaTestVersion  = "2.1.7"
 
 lazy val commonSettings = Project.defaultSettings ++ Seq(
   version         := projectVersion,
   organization    := "de.sciss",
-  scalaVersion    := "2.10.4",
-  crossScalaVersions := Seq("2.11.0-RC3", "2.10.4"),
+  scalaVersion    := "2.11.1",
+  crossScalaVersions := Seq("2.11.1", "2.10.4"),
   homepage        := Some(url("https://github.com/Sciss/" + baseName)),
   licenses        := Seq("GPL v2+" -> url("http://www.gnu.org/licenses/gpl-2.0.txt")),
   initialCommands in console := """import de.sciss.contextsnake._""",
