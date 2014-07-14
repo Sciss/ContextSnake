@@ -2,11 +2,11 @@
 
 ## statement
 
-ContextSnake is library for the Scala programming language implementing a variable length markov chain. It is (C)opyright 2013&ndash;2014 by Hanns Holger Rutz. All rights reserved. ContextSnake is released under the [GNU General Public License](http://github.com/Sciss/ContextSnake/blob/master/LICENSE) and comes with absolutely no warranties. To contact the author, send an email to `contact at sciss.de`
+ContextSnake is library for the Scala programming language implementing a variable length markov chain. It is (C)opyright 2013&ndash;2014 by Hanns Holger Rutz. All rights reserved. ContextSnake is released under the [GNU Lesser General Public License](http://github.com/Sciss/ContextSnake/blob/master/LICENSE) v2.1+ and comes with absolutely no warranties. To contact the author, send an email to `contact at sciss.de`
 
 ## requirements / installation
 
-ContextSnake currently builds with sbt 0.13 against Scala 2.10.
+ContextSnake currently builds with sbt 0.13 against Scala 2.11 and 2.10.
 
 ## design
 

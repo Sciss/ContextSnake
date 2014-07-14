@@ -1,22 +1,24 @@
 name                := "ContextSnake"
 
-version             := "0.1.2-SNAPSHOT"
+version             := "0.2.0"
 
 organization        := "de.sciss"
 
-scalaVersion        := "2.10.4"
+scalaVersion        := "2.11.1"
+
+crossScalaVersions  := Seq("2.11.1", "2.10.4")
 
 description         := "A library for moving around in variable length Markov chains"
 
 homepage            := Some(url("https://github.com/Sciss/" + name.value))
 
-licenses            := Seq("GPL v2+" -> url("http://www.gnu.org/licenses/gpl-2.0.txt"))
+licenses            := Seq("LGPL v2.1+" -> url("http://www.gnu.org/licenses/lgpl-2.1.txt"))
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "2.1.2" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.0" % "test"
 
 // retrieveManaged     := true
 
-scalacOptions      ++= Seq("-deprecation", "-unchecked", "-feature", "-language:higherKinds")
+scalacOptions      ++= Seq("-deprecation", "-unchecked", "-feature", "-Xfuture")
 
 scalacOptions      ++= Seq("-Xelide-below", (annotation.elidable.SEVERE).toString)
 
